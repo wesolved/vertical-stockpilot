@@ -1,0 +1,25 @@
+<odoo>
+    <data>
+        <record id="view_stockpilot_configuration_form" model="ir.ui.view">
+            <field name="name">stockpilot.configuration.form</field>
+            <field name="model">stockpilot.configuration</field>
+            <field name="arch" type="xml">
+                <form string="Stockpilot Configuration">
+                    <group>
+                        <field name="api_client_id"/>
+                        <field name="api_client_secret"/>
+                        <field name="base_url"/>
+                        <field name="environment"/>
+                    </group>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_stockpilot_configuration" model="ir.actions.act_window">
+            <field name="name">Stockpilot Configuration</field>
+            <field name="res_model">stockpilot.configuration</field>
+            <field name="view_mode">form</field>
+            <field name="view_id" ref="view_stockpilot_configuration_form"/>
+        </record>
+    </data>
+</odoo>
