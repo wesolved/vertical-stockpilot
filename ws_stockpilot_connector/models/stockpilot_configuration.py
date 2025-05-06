@@ -3,7 +3,8 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import requests
 
-from odoo import fields, models
+from odoo import _, fields, models
+from odoo.exceptions import UserError
 
 
 class StockpilotConfiguration(models.Model):
@@ -31,37 +32,63 @@ class StockpilotConfiguration(models.Model):
         "res.company", string="Company", default=lambda self: self.env.company
     )
 
-    def test_connection(self):
-        """Method to test Stockpilot API connection"""
+    def _verify_credentials(self):
+        """Check if API credentials and base URL are valid."""
+        self.ensure_one()
+        if not all([self.api_client_id, self.api_client_secret, self.base_url]):
+            raise UserError(_("All API credentials must be configured"))
+        if not self.base_url.startswith(("http://", "https://")):
+            raise UserError(_("Base URL must start with http:// or https://"))
+
+    def _test_api_connectivity(self):
+        """Connecting to Stockpilot API"""
         try:
-            url = f"{self.base_url}/api/test_connection"
-            headers = {
-                "API-Client-ID": self.api_client_id,
-                "API-Client-Secret": self.api_client_secret,
-            }
-            response = requests.get(url, headers=headers)
+            response = requests.get(
+                f"{self.base_url.rstrip('/')}/inventory",
+                headers={
+                    "X-CLIENT-ID": self.api_client_id,
+                    "X-CLIENT-SECRET": self.api_client_secret,
+                },
+                params={"page": 1, "page_size": 100},
+                timeout=10,
+            )
+            return response.status_code == 200, (
+                _("Connection successful")
+                if response.status_code == 200
+                else _("API returned status: %s") % response.status_code
+            )
+        except requests.exceptions.RequestException:
+            return False, _("Could not connect to API server")
+        except Exception:
+            return False, _("Unexpected error occurred")
+
+    def test_connection(self):
+        """
+        Tests the API connection and shows a notification with the result.
+        Triggered by a button click in the UI.
+        """
+        self.ensure_one()
+        try:
+            self._verify_credentials()
+            success, message = self._test_api_connectivity()
 
             return {
                 "type": "ir.actions.client",
                 "tag": "display_notification",
                 "params": {
-                    "title": "Success" if response.status_code == 200 else "Warning",
-                    "message": (
-                        "Connection successful!"
-                        if response.status_code == 200
-                        else "Failed to connect to Stockpilot API"
-                    ),
-                    "type": "success" if response.status_code == 200 else "warning",
-                    "sticky": False,
+                    "title": _("Success") if success else _("Failed"),
+                    "message": message,
+                    "type": "success" if success else "danger",
+                    "sticky": not success,
                 },
             }
-        except Exception as e:
+        except UserError as e:
             return {
                 "type": "ir.actions.client",
                 "tag": "display_notification",
                 "params": {
-                    "title": "Error",
-                    "message": f"Error: {str(e)}",
+                    "title": _("Error"),
+                    "message": str(e),
                     "type": "danger",
                     "sticky": True,
                 },
