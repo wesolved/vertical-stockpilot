@@ -3,9 +3,8 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import requests
 
-from odoo import fields, models, _
+from odoo import _, fields, models
 from odoo.exceptions import UserError
-
 
 
 class StockpilotConfiguration(models.Model):
@@ -38,7 +37,7 @@ class StockpilotConfiguration(models.Model):
         self.ensure_one()
         if not all([self.api_client_id, self.api_client_secret, self.base_url]):
             raise UserError(_("All API credentials must be configured"))
-        if not self.base_url.startswith(('http://', 'https://')):
+        if not self.base_url.startswith(("http://", "https://")):
             raise UserError(_("Base URL must start with http:// or https://"))
 
     def _test_api_connectivity(self):
@@ -47,14 +46,17 @@ class StockpilotConfiguration(models.Model):
             response = requests.get(
                 f"{self.base_url.rstrip('/')}/inventory",
                 headers={
-                    'X-CLIENT-ID': self.api_client_id,
-                    'X-CLIENT-SECRET': self.api_client_secret
+                    "X-CLIENT-ID": self.api_client_id,
+                    "X-CLIENT-SECRET": self.api_client_secret,
                 },
-                params={'page': 1, 'page_size': 100},
-                timeout=10
+                params={"page": 1, "page_size": 100},
+                timeout=10,
             )
-            return response.status_code == 200, _("Connection successful") if response.status_code == 200 else _(
-                "API returned status: %s") % response.status_code
+            return response.status_code == 200, (
+                _("Connection successful")
+                if response.status_code == 200
+                else _("API returned status: %s") % response.status_code
+            )
         except requests.exceptions.RequestException:
             return False, _("Could not connect to API server")
         except Exception:
@@ -71,23 +73,23 @@ class StockpilotConfiguration(models.Model):
             success, message = self._test_api_connectivity()
 
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Success') if success else _('Failed'),
-                    'message': message,
-                    'type': 'success' if success else 'danger',
-                    'sticky': not success,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Success") if success else _("Failed"),
+                    "message": message,
+                    "type": "success" if success else "danger",
+                    "sticky": not success,
+                },
             }
         except UserError as e:
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Error'),
-                    'message': str(e),
-                    'type': 'danger',
-                    'sticky': True,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Error"),
+                    "message": str(e),
+                    "type": "danger",
+                    "sticky": True,
+                },
             }
