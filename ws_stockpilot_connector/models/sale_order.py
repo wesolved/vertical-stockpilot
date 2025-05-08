@@ -4,7 +4,7 @@
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
-
+from datetime import datetime
 
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
@@ -122,21 +122,25 @@ class SaleOrder(models.Model):
 
     def _update_stockpilot_inventory(self):
         """Update stock levels in Stockpilot"""
-        config = self._get_stockpilot_config()
-        if not config:
+        config = self.env['stockpilot.configuration'].get_config(self.company_id.id)
+        if not config or not self.stockpilot_order_id:
             return False
-
-        product_ids = self.order_line.mapped('product_id').filtered(lambda p: p.default_code)
-        if not product_ids:
-            return False
-
-        inventory_data = [{
-            'sku': product.default_code,
-            'quantity': product.qty_available - product.outgoing_qty
-        } for product in product_ids]
 
         try:
-            response = self._call_stockpilot_api(config, 'inventory/update', inventory_data)
+            data = {
+                'odoo_order_id': self.id,
+                'status': 'forwarded',
+                'forwarded_at': datetime.now().isoformat()
+            }
+
+            response = self._call_stockpilot_api(
+                config,
+                f'orders/{self.stockpilot_order_id}/update-forwarding',
+                data,
+                method='PATCH'
+            )
             return response.get('success', False)
+
         except Exception as e:
+            self._handle_sync_error(str(e))
             return False

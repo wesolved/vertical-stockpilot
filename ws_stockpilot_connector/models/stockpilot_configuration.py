@@ -3,7 +3,7 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import requests
 
-from odoo import _, fields, models
+from odoo import _, fields, models, api
 from odoo.exceptions import UserError
 
 
@@ -93,3 +93,10 @@ class StockpilotConfiguration(models.Model):
                     "sticky": True,
                 },
             }
+
+    @api.model
+    def get_config(self, company_id=None):
+        """Get configuration for current or specified company"""
+        if company_id is None:
+            company_id = self.env.company.id
+        return self.search([('company_id', '=', company_id)], limit=1)
