@@ -4,7 +4,9 @@
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+
 from datetime import datetime
+
 
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
