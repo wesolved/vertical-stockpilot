@@ -44,18 +44,12 @@
         </record>
 
         <menuitem
-            id="menu_stockpilot_root"
+            id="menu_stockpilot_main"
             name="Stockpilot"
-            sequence="10"
+            sequence="100"
+            action="action_stockpilot_configuration"
             web_icon="ws_stockpilot_connector,static/description/icon.png"
         />
 
-        <menuitem
-            id="menu_stockpilot_config"
-            name="Configuration"
-            parent="menu_stockpilot_root"
-            sequence="10"
-            action="action_stockpilot_configuration"
-        />
     </data>
 </odoo>
