@@ -11,16 +11,15 @@
     "license": "LGPL-3",
     "depends": [
         "base",
-        "stock",
-        "sale",
+        "sale_stock",
     ],
     "data": [
         "data/cron.xml",
-        "data/cron_inventory.xml",
         "security/security.xml",
         "security/ir.model.access.csv",
         "views/stockpilot_configuration_views.xml",
     ],
+    'images': ['static/description/icon.png'],
     "installable": True,
     "application": True,
 }

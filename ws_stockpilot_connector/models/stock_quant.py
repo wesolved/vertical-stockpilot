@@ -4,6 +4,9 @@ class StockQuant(models.Model):
     _inherit = 'stock.quant'
 
     def write(self, vals):
+        """
+        Override of the write method to trigger a stock update in Stockpilot
+        """
         res = super(StockQuant, self).write(vals)
         if 'quantity' in vals:
             for quant in self.filtered(lambda q: q.product_id.default_code):
