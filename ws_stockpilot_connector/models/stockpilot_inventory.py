@@ -3,17 +3,37 @@ from odoo.exceptions import UserError
 import requests
 import logging
 
-_logger = logging.getLogger(__name__)
-from datetime import datetime
 
+
+_logger = logging.getLogger(__name__)
+import time
 
 class StockpilotInventory(models.Model):
     _name = 'stockpilot.inventory'
     _description = 'Stockpilot Inventory Synchronization'
 
+    _last_sync = {}
+
+    def _should_sync_product(self, product):
+        """Determine if we should sync this product right now"""
+        now = time.time()
+        last_sync = self._last_sync.get(product.id, 0)
+
+        # Only sync if:
+        # 1. Never synced before, OR
+        # 2. Last sync was more than 5 minutes ago
+        if now - last_sync < 300:  # 5 minute cooldown
+            _logger.debug(f"Skipping sync for {product.default_code}, recently synced")
+            return False
+        return True
+
     def _trigger_stock_update(self, product):
         """Main method to update stock in Stockpilot"""
-        _logger.info(f"Attempting to sync product: {product.id} - {product.default_code}")
+        if not self._should_sync_product(product):
+            return True
+
+        self._last_sync[product.id] = time.time()
+        _logger.info(f"Starting sync for product: {product.id} - {product.default_code}")
 
         config = self.env['stockpilot.configuration'].get_config()
         if not config:
@@ -184,80 +204,95 @@ class StockpilotInventory(models.Model):
         )
 
     def import_stock_levels(self, config):
-        """Stock import with proper stock updates"""
+        """Stock import with better error handling and product creation"""
         try:
             _logger.info("=== Starting stock import ===")
 
-            # Get inventory data
-            inventory = self._get_stockpilot_inventory(config)
-            if not inventory:
-                _logger.error("No inventory data received")
-                return {'updated': 0, 'failed': 0}
+            # 1. Get inventory data with error handling
+            try:
+                inventory = self._get_stockpilot_inventory(config)
+                if not inventory:
+                    _logger.error("No inventory data received from API")
+                    return {'updated': 0, 'created': 0, 'failed': 0}
+            except Exception as e:
+                _logger.error(f"Failed to fetch inventory: {str(e)}")
+                return {'updated': 0, 'created': 0, 'failed': 0}
 
-            # Get stock location
-            location = self._get_stock_location(config.company_id)
-            if not location:
-                _logger.error("No stock location found")
-                return {'updated': 0, 'failed': len(inventory) if inventory else 1}
+            # 2. Get or create stock location
+            try:
+                location = self._get_stock_location(config.company_id)
+                if not location:
+                    _logger.error("No stock location available")
+                    return {'updated': 0, 'created': 0, 'failed': len(inventory)}
+            except Exception as e:
+                _logger.error(f"Failed to get stock location: {str(e)}")
+                return {'updated': 0, 'created': 0, 'failed': len(inventory)}
 
             Product = self.env['product.product']
-            updated = failed = 0
+            updated = created = failed = 0
 
             for item in inventory:
                 try:
-                    # Clean and prepare identifiers
-                    sku = (item.get('sku') or '').strip().upper()
-                    barcode = (item.get('barcode') or '').strip()
+                    # 3. Clean and validate item data
+                    sku = (item.get('sku') or '').strip().upper() or None
+                    barcode = (item.get('barcode') or '').strip() or None
+                    product_name = item.get('title', 'Unknown Product').strip()
 
                     if not sku and not barcode:
-                        _logger.warning("Item has no SKU or barcode: %s", item)
+                        _logger.warning(f"Skipping item with no SKU/barcode: {item}")
                         failed += 1
                         continue
 
-                    # Search product - try multiple methods
+                    # 4. Find or create product
                     product = None
+                    domain = [('type', '=', 'product')]
+
                     if sku:
-                        product = Product.search([
-                            '|',
-                            ('default_code', '=ilike', sku),
-                            ('barcode', '=', sku),
-                            ('type', '=', 'product')
-                        ], limit=1)
-
+                        product = Product.search([('default_code', '=', sku)] + domain, limit=1)
                     if not product and barcode:
-                        product = Product.search([
-                            ('barcode', '=', barcode),
-                            ('type', '=', 'product')
-                        ], limit=1)
+                        product = Product.search([('barcode', '=', barcode)] + domain, limit=1)
 
+                    # Create product if not found
                     if not product:
-                        _logger.info("Product not found for SKU: %s or barcode: %s", sku, barcode)
-                        failed += 1
-                        continue
+                        try:
+                            product_vals = {
+                                'name': product_name,
+                                'type': 'product',
+                                'default_code': sku,
+                                'barcode': barcode,
+                                'standard_price': float(item.get('purchase_price', 0)),
+                                'list_price': float(item.get('retail_price', 0)),
+                            }
+                            product = Product.create(product_vals)
+                            created += 1
+                            _logger.info(f"Created new product: {product_name} ({sku})")
+                        except Exception as e:
+                            _logger.error(f"Failed to create product {product_name}: {str(e)}")
+                            failed += 1
+                            continue
 
-                    # Get quantities
-                    qty = float(item.get('quantity', 0))
-                    reserved = float(item.get('reserved', 0))
-                    available = qty - reserved
-
-                    # Update stock using the new method
-                    if self._update_stock_quant(product, location, available):
-                        updated += 1
-                        _logger.debug("Updated %s to %s", product.default_code, available)
-                    else:
+                    # 5. Update stock quantities
+                    try:
+                        qty = float(item.get('quantity', 0))
+                        if self._update_stock_quant(product, location, qty):
+                            updated += 1
+                            _logger.debug(f"Updated {product.default_code} to {qty}")
+                        else:
+                            failed += 1
+                    except Exception as e:
+                        _logger.error(f"Failed to update stock for {sku}: {str(e)}")
                         failed += 1
-                        _logger.error("Failed to update stock for %s", product.default_code)
 
                 except Exception as e:
                     failed += 1
-                    _logger.error("Failed to update %s: %s", sku or barcode, str(e), exc_info=True)
+                    _logger.error(f"Error processing item {sku}: {str(e)}", exc_info=True)
 
-            _logger.info("Import complete: %s updated, %s failed", updated, failed)
-            return {'updated': updated, 'failed': failed}
+            _logger.info(f"Import complete: {updated} updated, {created} created, {failed} failed")
+            return {'updated': updated, 'created': created, 'failed': failed}
 
         except Exception as e:
-            _logger.error("Import failed: %s", str(e), exc_info=True)
-            return {'updated': 0, 'failed': len(inventory) if inventory else 1}
+            _logger.error(f"Stock import failed completely: {str(e)}", exc_info=True)
+            return {'updated': 0, 'created': 0, 'failed': len(inventory) if inventory else 1}
 
     def _get_stockpilot_inventory(self, config):
         """Fetch inventory with better response handling"""

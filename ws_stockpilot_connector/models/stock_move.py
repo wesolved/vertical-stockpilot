@@ -3,11 +3,8 @@ from odoo import models, api
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
-    def _action_done(self, cancel_backorder=False):
-        """
-        Override of the `_action_done` method to trigger a stock update in Stockpilot
-        """
-        res = super(StockMove, self)._action_done(cancel_backorder)
-        for move in self.filtered(lambda m: m.state == 'done' and m.product_id.default_code):
-            self.env['stockpilot.inventory']._trigger_stock_update(move.product_id)
+    def _action_done(self):
+        res = super()._action_done()
+        if self.state == 'done':
+            self.env['stockpilot.inventory'].with_delay(eta=60)._trigger_stock_update(self.product_id)
         return res
