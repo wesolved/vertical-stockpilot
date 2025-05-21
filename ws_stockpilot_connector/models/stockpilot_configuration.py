@@ -36,21 +36,25 @@ class StockpilotConfiguration(models.Model):
     )
 
     _sql_constraints = [
-        ('company_uniq', 'unique(company_id)', 'Only one configuration per company allowed!'),
+        (
+            "company_uniq", 
+            "unique(company_id)", 
+            "Only one configuration per company allowed!"
+        ),
     ]
 
     @api.model
     def _get_default_config(self):
         """Get or create default configuration for current company"""
         company_id = self.env.company.id
-        config = self.search([('company_id', '=', company_id)], limit=1)
+        config = self.search([("company_id", "=", company_id)], limit=1)
         if not config:
             config = self.create({
-                'company_id': company_id,
-                'api_client_id': 'f9e56e88-14e1-4fc0-8089-04aba8e6088b',
-                'api_client_secret': '4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f',
-                'base_url': 'https://api.stockpilot.dev',
-                'environment': 'test',
+                "company_id": company_id,
+                "api_client_id": "f9e56e88-14e1-4fc0-8089-04aba8e6088b",
+                "api_client_secret": "4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f",
+                "base_url": "https://api.stockpilot.dev",
+                "environment": "test",
             })
         return config
 
@@ -58,12 +62,12 @@ class StockpilotConfiguration(models.Model):
         """Return action to open the configuration form"""
         config = self._get_default_config()
         return {
-            'type': 'ir.actions.act_window',
-            'res_model': self._name,
-            'view_mode': 'form',
-            'res_id': config.id,
-            'target': 'current',
-            'context': {'form_view_initial_mode': 'edit'},
+            "type": "ir.actions.act_window",
+            "res_model": self._name,
+            "view_mode": "form",
+            "res_id": config.id,
+            "target": "current",
+            "context": {"form_view_initial_mode": "edit"},
         }
 
     def _verify_credentials(self):
