@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <odoo>
     <data noupdate="1">
         <record id="view_stockpilot_configuration_tree" model="ir.ui.view">
@@ -6,10 +6,10 @@
             <field name="model">stockpilot.configuration</field>
             <field name="arch" type="xml">
                 <tree>
-                    <field name="company_id"/>
-                    <field name="api_client_id"/>
-                    <field name="base_url"/>
-                    <field name="environment"/>
+                    <field name="company_id" />
+                    <field name="api_client_id" />
+                    <field name="base_url" />
+                    <field name="environment" />
                 </tree>
             </field>
         </record>
@@ -21,13 +21,30 @@
                 <form string="Stockpilot Configuration">
                     <sheet>
                         <group>
-                            <field name="company_id"/>
-                            <field name="api_client_id"/>
-                            <field name="api_client_secret"/>
-                            <field name="base_url"/>
-                            <field name="environment"/>
-                            <button name="test_connection" string="Test Connection" type="object" class="btn-primary"/>
+                            <field name="company_id" />
+                            <field name="api_client_id" />
+                            <field name="api_client_secret" />
+                            <field name="base_url" />
+                            <field name="environment" />
                         </group>
+                        <div class="oe_button_box" name="button_box">
+                            <button name="test_connection"
+                                    string="Test Connection"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="import_orders"
+                                    string="Import Orders"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="import_stock"
+                                    string="Import Stock"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="export_products"
+                                    string="Export Products"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                        </div>
                     </sheet>
                 </form>
             </field>
@@ -37,18 +54,16 @@
             <field name="name">Stockpilot Configuration</field>
             <field name="res_model">stockpilot.configuration</field>
             <field name="view_mode">tree,form</field>
-            <field name="view_id" ref="view_stockpilot_configuration_form"/>
+            <field name="view_id" ref="view_stockpilot_configuration_form" />
         </record>
 
-        <menuitem id="menu_stockpilot_root"
-                 name="Stockpilot"
-                 sequence="10"
-                 web_icon="stockpilot,static/description/icon.png"/>
+        <menuitem
+            id="menu_stockpilot_main"
+            name="Stockpilot"
+            sequence="100"
+            action="action_stockpilot_configuration"
+            web_icon="ws_stockpilot_connector,static/description/icon.png"
+        />
 
-        <menuitem id="menu_stockpilot_config"
-                 name="Configuration"
-                 parent="menu_stockpilot_root"
-                 sequence="10"
-                 action="action_stockpilot_configuration"/>
     </data>
 </odoo>
