@@ -27,9 +27,9 @@
                             <field name="base_url" />
                             <field name="environment" />
                             <button name="test_connection" string="Test Connection" type="object" class="btn-primary" />
-                             <button name="import_orders" string="Import Orders" type="object" class="btn-primary"/>
-                            <button name="import_stock" string="Import Stock" type="object" class="btn-primary"/>
-                            <button name="export_products" string="Export Products" type="object" class="btn-primary"/>
+                             <button name="import_orders" string="Import Orders" type="object" class="btn-primary" />
+                            <button name="import_stock" string="Import Stock" type="object" class="btn-primary" />
+                            <button name="export_products" string="Export Products" type="object" class="btn-primary" />
                         </group>
                     </sheet>
                 </form>
@@ -43,12 +43,7 @@
             <field name="view_id" ref="view_stockpilot_configuration_form" />
         </record>
 
-        <menuitem
-            id="menu_stockpilot_root"
-            name="Stockpilot"
-            sequence="10"
-            web_icon="ws_stockpilot_connector,static/description/icon.png"
-        />
+        <menuitem id="menu_stockpilot_root" name="Stockpilot" sequence="10" web_icon="ws_stockpilot_connector,static/description/icon.png" />
 
         <menuitem
             id="menu_stockpilot_config"

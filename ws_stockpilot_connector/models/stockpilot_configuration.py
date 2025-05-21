@@ -1,13 +1,14 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
-import requests
-
-from odoo import _, fields, models, api
-from odoo.exceptions import UserError
 import logging
 
+import requests
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
+
 _logger = logging.getLogger(__name__)
+
 
 class StockpilotConfiguration(models.Model):
     _name = "stockpilot.configuration"
@@ -101,17 +102,20 @@ class StockpilotConfiguration(models.Model):
         """Get configuration for current or specified company"""
         if company_id is None:
             company_id = self.env.company.id
-        return self.search([('company_id', '=', company_id)], limit=1)
+        return self.search([("company_id", "=", company_id)], limit=1)
 
     def import_orders(self):
         """Button action to import orders from Stockpilot with detailed logging"""
         self.ensure_one()
         try:
             _logger.info("Starting order import from Stockpilot")
-            _logger.debug(f"Using configuration - Client ID: {self.api_client_id}, Base URL: {self.base_url}")
+            _logger.debug(
+                f"Using configuration - Client ID: {self.api_client_id},"
+                f" Base URL: {self.base_url}"
+            )
 
             # Get the sync model
-            sync_model = self.env['stockpilot.sync']
+            sync_model = self.env["stockpilot.sync"]
 
             # Execute the import
             result = sync_model._fetch_stockpilot_orders()
@@ -119,75 +123,78 @@ class StockpilotConfiguration(models.Model):
             if not result:
                 _logger.error("Order import returned False/None - possible failure")
                 return {
-                    'type': 'ir.actions.client',
-                    'tag': 'display_notification',
-                    'params': {
-                        'title': _('Warning'),
-                        'message': _('Order import completed but may have had issues'),
-                        'type': 'warning',
-                        'sticky': True,
-                    }
+                    "type": "ir.actions.client",
+                    "tag": "display_notification",
+                    "params": {
+                        "title": _("Warning"),
+                        "message": _("Order import completed but may have had issues"),
+                        "type": "warning",
+                        "sticky": True,
+                    },
                 }
 
             _logger.info("Orders imported successfully")
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Success'),
-                    'message': _('Orders imported successfully'),
-                    'type': 'success',
-                    'sticky': False,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Success"),
+                    "message": _("Orders imported successfully"),
+                    "type": "success",
+                    "sticky": False,
+                },
             }
         except Exception as e:
             _logger.error(f"Failed to import orders: {str(e)}", exc_info=True)
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Error'),
-                    'message': _('Failed to import orders: %s') % str(e),
-                    'type': 'danger',
-                    'sticky': True,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Error"),
+                    "message": _("Failed to import orders: %s") % str(e),
+                    "type": "danger",
+                    "sticky": True,
+                },
             }
 
     def import_stock(self):
         """Button action to import stock levels"""
         self.ensure_one()
         try:
-            result = self.env['stockpilot.inventory'].import_stock_levels(self)
+            result = self.env["stockpilot.inventory"].import_stock_levels(self)
 
-            if result['failed'] > 0:
-                message = _("Stock import completed with %d updated and %d failed items") % (
-                    result['updated'], result['failed'])
-                notif_type = 'warning'
+            if result["failed"] > 0:
+                message = _(
+                    "Stock import completed with %d updated and %d failed items"
+                ) % (result["updated"], result["failed"])
+                notif_type = "warning"
             else:
-                message = _("Successfully updated stock for %d products") % result['updated']
-                notif_type = 'success'
+                message = (
+                    _("Successfully updated stock for %d products") % result["updated"]
+                )
+                notif_type = "success"
 
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Stock Import Results'),
-                    'message': message,
-                    'type': notif_type,
-                    'sticky': result['failed'] > 0,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Stock Import Results"),
+                    "message": message,
+                    "type": notif_type,
+                    "sticky": result["failed"] > 0,
+                },
             }
         except Exception as e:
             _logger.error(f"Failed to import stock: {str(e)}", exc_info=True)
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Error'),
-                    'message': _('Failed to import stock levels: %s') % str(e),
-                    'type': 'danger',
-                    'sticky': True,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Error"),
+                    "message": _("Failed to import stock levels: %s") % str(e),
+                    "type": "danger",
+                    "sticky": True,
+                },
             }
 
     def export_products(self):
@@ -196,60 +203,69 @@ class StockpilotConfiguration(models.Model):
         try:
             success_count = 0
             fail_count = 0
-            products = self.env['product.product'].search([
-                ('type', '=', 'product'),
-                ('default_code', '!=', False),
-                ('active', '=', True)
-            ])
+            products = self.env["product.product"].search(
+                [
+                    ("type", "=", "product"),
+                    ("default_code", "!=", False),
+                    ("active", "=", True),
+                ]
+            )
 
             if not products:
                 return {
-                    'type': 'ir.actions.client',
-                    'tag': 'display_notification',
-                    'params': {
-                        'title': _('Warning'),
-                        'message': _('No products with SKU found to export'),
-                        'type': 'warning',
-                        'sticky': True,
-                    }
+                    "type": "ir.actions.client",
+                    "tag": "display_notification",
+                    "params": {
+                        "title": _("Warning"),
+                        "message": _("No products with SKU found to export"),
+                        "type": "warning",
+                        "sticky": True,
+                    },
                 }
 
             _logger.info(f"Starting export of {len(products)} products to Stockpilot")
 
             for product in products:
                 try:
-                    if self.env['stockpilot.inventory']._trigger_stock_update(product):
+                    if self.env["stockpilot.inventory"]._trigger_stock_update(product):
                         success_count += 1
-                        _logger.info(f"Successfully exported product {product.default_code}")
+                        _logger.info(
+                            f"Successfully exported product {product.default_code}"
+                        )
                     else:
                         fail_count += 1
-                        _logger.warning(f"Failed to export product {product.default_code}")
+                        _logger.warning(
+                            f"Failed to export product {product.default_code}"
+                        )
                 except Exception as e:
                     fail_count += 1
-                    _logger.error(f"Error exporting product {product.default_code}: {str(e)}")
+                    _logger.error(
+                        f"Error exporting product {product.default_code}: {str(e)}"
+                    )
 
-            message = _("Export completed: %d successful, %d failed. Check logs for details.") % (success_count,
-                                                                                                  fail_count)
+            message = _(
+                "Export completed: %d successful, %d failed. Check logs for details."
+            ) % (success_count, fail_count)
 
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Export Results'),
-                    'message': message,
-                    'type': 'success' if fail_count == 0 else 'warning',
-                    'sticky': True,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Export Results"),
+                    "message": message,
+                    "type": "success" if fail_count == 0 else "warning",
+                    "sticky": True,
+                },
             }
         except Exception as e:
             _logger.error(f"Export failed completely: {str(e)}")
             return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': _('Error'),
-                    'message': _('Failed to export products: %s') % str(e),
-                    'type': 'danger',
-                    'sticky': True,
-                }
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Error"),
+                    "message": _("Failed to export products: %s") % str(e),
+                    "type": "danger",
+                    "sticky": True,
+                },
             }
