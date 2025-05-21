@@ -26,11 +26,25 @@
                             <field name="api_client_secret" />
                             <field name="base_url" />
                             <field name="environment" />
-                            <button name="test_connection" string="Test Connection" type="object" class="btn-primary" />
-                             <button name="import_orders" string="Import Orders" type="object" class="btn-primary"/>
-                            <button name="import_stock" string="Import Stock" type="object" class="btn-primary"/>
-                            <button name="export_products" string="Export Products" type="object" class="btn-primary"/>
                         </group>
+                        <div class="oe_button_box" name="button_box">
+                            <button name="test_connection"
+                                    string="Test Connection"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="import_orders"
+                                    string="Import Orders"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="import_stock"
+                                    string="Import Stock"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                            <button name="export_products"
+                                    string="Export Products"
+                                    type="object"
+                                    class="oe_stat_button btn-primary"/>
+                        </div>
                     </sheet>
                 </form>
             </field>
