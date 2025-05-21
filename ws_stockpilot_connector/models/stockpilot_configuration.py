@@ -109,9 +109,6 @@ class StockpilotConfiguration(models.Model):
         self.ensure_one()
         try:
             _logger.info("Starting order import from Stockpilot")
-            _logger.debug(
-                f"Using configuration - Client ID: {self.api_client_id}, Base URL: {self.base_url}"
-            )
 
             # Get the sync model
             sync_model = self.env["stockpilot.sync"]

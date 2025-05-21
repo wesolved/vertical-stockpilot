@@ -91,7 +91,7 @@ class StockpilotSync(models.Model):
                             success_count += 1
                     except Exception as e:
                         _logger.error(
-                            f"Failed to process order {order_data.get('order_number')}: {str(e)}"
+                            f"Failed {order_data.get('order_number')}: {str(e)}"
                         )
 
                 _logger.info(
@@ -144,7 +144,7 @@ class StockpilotSync(models.Model):
                 "order_line": self._prepare_order_lines(
                     order_data.get("order_details", {}).get("line_items", [])
                 ),
-                "note": f"Imported from Stockpilot\nChannel: {order_data.get('handle', 'Unknown')}",
+                "note": f"Imported {order_data.get('handle', 'Unknown')}",
             }
 
             # Check if order exists
@@ -224,7 +224,10 @@ class StockpilotSync(models.Model):
             if order_details.get("billing_street"):
                 partner_vals.update(
                     {
-                        "street": f"{order_details.get('billing_street')} {order_details.get('billing_housenumber', '')}",
+                        "street": (
+                            f"{order_details.get('billing_street')} "
+                            f"{order_details.get('billing_housenumber', '')}"
+                        ),
                         "street2": order_details.get("billing_address_2", ""),
                         "city": order_details.get("billing_city", ""),
                         "zip": order_details.get("billing_zipcode", ""),

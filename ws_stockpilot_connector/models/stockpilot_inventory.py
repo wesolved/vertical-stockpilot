@@ -353,127 +353,125 @@ class StockpilotInventory(models.Model):
         )
 
     def import_stock_levels(self, config):
-        """Complete stock import with robust error handling"""
-        inventory_items = []
-        results = {"updated": 0, "created": 0, "failed": 0}
-
+        """Orchestrate complete stock import process"""
         try:
-            _logger.info("=== Starting stock import ===")
+            inventory_items = self._fetch_inventory_items(config)
+            if not inventory_items:
+                return {"updated": 0, "created": 0, "failed": 0}
 
-            try:
-                inventory_response = self._get_stockpilot_inventory(config)
-                if not inventory_response:
-                    _logger.error("No inventory data received from API")
-                    return {"updated": 0, "created": 0, "failed": 0}
-
-                if isinstance(inventory_response, (list, dict)):
-                    if isinstance(inventory_response, dict):
-                        # Try all possible keys that might contain the items
-                        for key in ["results", "data", "items"]:
-                            if key in inventory_response:
-                                inventory_items = inventory_response[key]
-                                break
-                    else:
-                        inventory_items = inventory_response
-
-                    if not inventory_items:
-                        _logger.error("No inventory items found in response")
-                        return {"updated": 0, "created": 0, "failed": 0}
-
-                    _logger.info("Processing %d inventory items", len(inventory_items))
-                else:
-                    _logger.error(
-                        "Unexpected response format: %s", type(inventory_response)
-                    )
-                    return {"updated": 0, "created": 0, "failed": 0}
-
-            except Exception as e:
-                _logger.error("Failed to get inventory: %s", str(e), exc_info=True)
-                raise UserError(_("Failed to fetch inventory: %s") % str(e))
-
-            try:
-                location = self._get_stock_location(config.company_id)
-                if not location:
-                    _logger.error("No stock location available")
-                    return {"updated": 0, "created": 0, "failed": len(inventory_items)}
-            except Exception as e:
-                _logger.error("Failed to get stock location: %s", str(e))
+            location = self._get_stock_location(config.company_id)
+            if not location:
                 return {"updated": 0, "created": 0, "failed": len(inventory_items)}
 
-            Product = self.env["product.product"]
-            processed_skus = set()
-
-            for item in inventory_items:
-                try:
-                    sku = (item.get("sku") or "").strip().upper()
-                    if not sku:
-                        _logger.warning(
-                            "Skipping item with no SKU: %s", item.get("id", "unknown")
-                        )
-                        results["failed"] += 1
-                        continue
-
-                    if sku in processed_skus:
-                        _logger.debug("Skipping duplicate SKU: %s", sku)
-                        continue
-
-                    processed_skus.add(sku)
-                    _logger.info("Processing product: %s", sku)
-
-                    product = Product.search(
-                        [("default_code", "=", sku), ("type", "=", "product")], limit=1
-                    )
-
-                    if not product:
-                        try:
-                            product_vals = {
-                                "name": item.get("title", "Product " + sku),
-                                "default_code": sku,
-                                "type": "product",
-                                "barcode": item.get("barcode"),
-                                "standard_price": float(item.get("purchase_price", 0)),
-                                "list_price": float(item.get("retail_price", 0)),
-                            }
-                            product = Product.create(product_vals)
-                            results["created"] += 1
-                            _logger.info("Created new product: %s", sku)
-                        except Exception as e:
-                            _logger.error(
-                                "Failed to create product %s: %s", sku, str(e)
-                            )
-                            results["failed"] += 1
-                            continue
-
-                    try:
-                        qty = float(item.get("quantity", 0))
-                        if self._update_stock_quant(product, location, qty):
-                            results["updated"] += 1
-                            _logger.info("Updated stock for %s to %s", sku, qty)
-                        else:
-                            results["failed"] += 1
-                    except Exception as e:
-                        results["failed"] += 1
-                        _logger.error("Failed to update stock for %s: %s", sku, str(e))
-
-                except Exception as e:
-                    results["failed"] += 1
-                    _logger.error("Error processing item: %s", str(e), exc_info=True)
-
-            _logger.info(
-                "Import complete: %d updated, %d created, %d failed",
-                results["updated"],
-                results["created"],
-                results["failed"],
-            )
-            return results
-
+            return self._process_inventory_items(inventory_items, location)
         except Exception as e:
             _logger.error("Stock import failed: %s", str(e), exc_info=True)
-            return {
-                "updated": 0,
-                "created": 0,
-                "failed": len(inventory_items) if inventory_items else 1,
+            return {"updated": 0, "created": 0, "failed": 1}
+
+    def _fetch_inventory_items(self, config):
+        """Fetch and validate inventory data from API"""
+        try:
+            response = self._get_stockpilot_inventory(config)
+            if not response:
+                _logger.error("No inventory data received from API")
+                return None
+
+            if isinstance(response, dict):
+                for key in ["results", "data", "items"]:
+                    if key in response:
+                        return response[key]
+            elif isinstance(response, list):
+                return response
+
+            _logger.error("Unexpected response format: %s", type(response))
+            return None
+        except Exception as e:
+            _logger.error("Failed to get inventory: %s", str(e), exc_info=True)
+            raise UserError(_("Failed to fetch inventory: %s") % str(e))
+
+    def _process_inventory_items(self, items, location):
+        """Process list of inventory items"""
+        results = {"updated": 0, "created": 0, "failed": 0}
+        Product = self.env["product.product"]
+        processed_skus = set()
+
+        for item in items:
+            try:
+                sku = (item.get("sku") or "").strip().upper()
+                if not sku:
+                    _logger.warning("Skipping item with no SKU: %s", item.get("id", "unknown"))
+                    results["failed"] += 1
+                    continue
+
+                if sku in processed_skus:
+                    _logger.debug("Skipping duplicate SKU: %s", sku)
+                    continue
+
+                processed_skus.add(sku)
+                self._process_single_item(item, sku, Product, location, results)
+
+            except Exception as e:
+                results["failed"] += 1
+                _logger.error("Error processing item: %s", str(e), exc_info=True)
+
+        _logger.info(
+            "Import complete: %d updated, %d created, %d failed",
+            results["updated"],
+            results["created"],
+            results["failed"],
+        )
+        return results
+
+    def _process_single_item(self, item, sku, Product, location, results):
+        """Handle processing of a single inventory item"""
+        product = Product.search(
+            [("default_code", "=", sku), ("type", "=", "product")],
+            limit=1
+        )
+
+        if not product:
+            product = self._create_product(item, sku, Product, results)
+            if not product:
+                return
+
+        self._update_product_stocks(product, location, item, results)
+
+    def _create_product(self, item, sku, Product, results):
+        """Create new product if doesn't exist"""
+        try:
+            product_vals = {
+                "name": item.get("title", "Product " + sku),
+                "default_code": sku,
+                "type": "product",
+                "barcode": item.get("barcode"),
+                "standard_price": float(item.get("purchase_price", 0)),
+                "list_price": float(item.get("retail_price", 0)),
             }
+            product = Product.create(product_vals)
+            results["created"] += 1
+            _logger.info("Created new product: %s", sku)
+            return product
+        except Exception as e:
+            _logger.error("Failed to create product %s: %s", sku, str(e))
+            results["failed"] += 1
+            return None
+
+    def _update_product_stocks(self, product, location, item, results):
+        """Update stock quantity for existing product"""
+        try:
+            qty = float(item.get("quantity", 0))
+            if self._update_stock_quant(product, location, qty):
+                results["updated"] += 1
+                _logger.info("Updated stock for %s to %s", product.default_code, qty)
+            else:
+                results["failed"] += 1
+        except Exception as e:
+            results["failed"] += 1
+            _logger.error(
+                "Failed to update stock for %s: %s",
+                product.default_code,
+                str(e)
+            )
 
     def _update_product_from_inventory(self, item, Product):
         """Update a single product from inventory data with flexible field mapping"""
