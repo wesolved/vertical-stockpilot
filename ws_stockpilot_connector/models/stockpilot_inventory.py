@@ -399,7 +399,9 @@ class StockpilotInventory(models.Model):
             try:
                 sku = (item.get("sku") or "").strip().upper()
                 if not sku:
-                    _logger.warning("Skipping item with no SKU: %s", item.get("id", "unknown"))
+                    _logger.warning(
+                        "Skipping item with no SKU: %s", item.get("id", "unknown")
+                    )
                     results["failed"] += 1
                     continue
 
@@ -425,8 +427,7 @@ class StockpilotInventory(models.Model):
     def _process_single_item(self, item, sku, Product, location, results):
         """Handle processing of a single inventory item"""
         product = Product.search(
-            [("default_code", "=", sku), ("type", "=", "product")],
-            limit=1
+            [("default_code", "=", sku), ("type", "=", "product")], limit=1
         )
 
         if not product:
@@ -468,9 +469,7 @@ class StockpilotInventory(models.Model):
         except Exception as e:
             results["failed"] += 1
             _logger.error(
-                "Failed to update stock for %s: %s",
-                product.default_code,
-                str(e)
+                "Failed to update stock for %s: %s", product.default_code, str(e)
             )
 
     def _update_product_from_inventory(self, item, Product):
