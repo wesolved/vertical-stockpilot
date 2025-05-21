@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <odoo>
     <data noupdate="1">
         <!-- Form View -->
@@ -30,15 +30,15 @@
             <field name="name">Stockpilot Configuration</field>
             <field name="res_model">stockpilot.configuration</field>
             <field name="view_mode">form</field>
-            <field name="view_id" ref="view_stockpilot_configuration_form"/>
+            <field name="view_id" ref="view_stockpilot_configuration_form" />
             <field name="target">current</field>
-            <field name="binding_model_id" ref="model_stockpilot_configuration"/>
+            <field name="binding_model_id" ref="model_stockpilot_configuration" />
             <field name="binding_type">action</field>
         </record>
 
         <record id="action_server_load_configuration" model="ir.actions.server">
             <field name="name">Load Stockpilot Configuration</field>
-            <field name="model_id" ref="model_stockpilot_configuration"/>
+            <field name="model_id" ref="model_stockpilot_configuration" />
             <field name="state">code</field>
             <field name="code">
 model = env['stockpilot.configuration']
@@ -47,11 +47,11 @@ action = model._get_default_config()._get_config_action()
         </record>
 
         <menuitem
-            id="menu_stockpilot_main"
-            name="Stockpilot"
-            sequence="100"
-            action="action_server_load_configuration"
-            web_icon="ws_stockpilot_connector,static/description/icon.png"
+        id="menu_stockpilot_main"
+        name="Stockpilot"
+        sequence="100"
+        action="action_server_load_configuration"
+        web_icon="ws_stockpilot_connector,static/description/icon.png"
         />
     </data>
 </odoo>
