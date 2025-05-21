@@ -37,9 +37,9 @@ class StockpilotConfiguration(models.Model):
 
     _sql_constraints = [
         (
-            "company_uniq", 
-            "unique(company_id)", 
-            "Only one configuration per company allowed!"
+            "company_uniq",
+            "unique(company_id)",
+            "Only one configuration per company allowed!",
         ),
     ]
 
@@ -49,13 +49,17 @@ class StockpilotConfiguration(models.Model):
         company_id = self.env.company.id
         config = self.search([("company_id", "=", company_id)], limit=1)
         if not config:
-            config = self.create({
+            config = self.create(
+                {
                 "company_id": company_id,
                 "api_client_id": "f9e56e88-14e1-4fc0-8089-04aba8e6088b",
-                "api_client_secret": "4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f",
+                "api_client_secret": (
+                    "4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f"
+                ),
                 "base_url": "https://api.stockpilot.dev",
                 "environment": "test",
-            })
+                }
+            )
         return config
 
     def _get_config_action(self):
