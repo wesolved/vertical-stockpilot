@@ -159,13 +159,16 @@ class StockpilotConfiguration(models.Model):
         try:
             result = self.env['stockpilot.inventory'].import_stock_levels(self)
 
+            message = _("Stock import completed with:") + "\n"
+            message += _("- %d products updated") % result['updated'] + "\n"
+            message += _("- %d products created") % result['created'] + "\n"
+            message += _("- %d products failed") % result['failed']
+
+            notif_type = 'success'
             if result['failed'] > 0:
-                message = _("Stock import completed with %d updated and %d failed items") % (
-                    result['updated'], result['failed'])
                 notif_type = 'warning'
-            else:
-                message = _("Successfully updated stock for %d products") % result['updated']
-                notif_type = 'success'
+            if result['updated'] == 0 and result['created'] == 0:
+                notif_type = 'danger'
 
             return {
                 'type': 'ir.actions.client',
