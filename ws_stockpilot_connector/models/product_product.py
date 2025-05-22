@@ -1,8 +1,18 @@
-from odoo import models
+from odoo import fields, models
 
 
 class ProductProduct(models.Model):
     _inherit = "product.product"
+
+    stockpilot_id = fields.Char(
+        string="Stockpilot ID",
+        help="Unique identifier for the product in Stockpilot.",
+    )
+
+    exported_to_stockpilot = fields.Boolean(
+        string="Exported to Stockpilot",
+        help="Indicates whether the product has been exported to Stockpilot.",
+    )
 
     def write(self, vals):
         """

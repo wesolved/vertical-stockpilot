@@ -14,6 +14,11 @@ class StockpilotConfiguration(models.Model):
     _name = "stockpilot.configuration"
     _description = "Stockpilot Configuration"
 
+    name = fields.Char(
+        string="Name",
+        required=True,
+    )
+
     api_client_id = fields.Char(
         string="API Client ID", default="f9e56e88-14e1-4fc0-8089-04aba8e6088b"
     )
@@ -153,84 +158,21 @@ class StockpilotConfiguration(models.Model):
             sync_model = self.env["stockpilot.sync"]
 
             # Execute the import
-            result = sync_model._fetch_stockpilot_orders()
+            result = sync_model.with_delay()._fetch_stockpilot_orders()
 
             if not result:
                 _logger.error("Order import returned False/None - possible failure")
-                return {
-                    "type": "ir.actions.client",
-                    "tag": "display_notification",
-                    "params": {
-                        "title": _("Warning"),
-                        "message": _("Order import completed but may have had issues"),
-                        "type": "warning",
-                        "sticky": True,
-                    },
-                }
 
             _logger.info("Orders imported successfully")
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Success"),
-                    "message": _("Orders imported successfully"),
-                    "type": "success",
-                    "sticky": False,
-                },
-            }
         except Exception as e:
             _logger.error(f"Failed to import orders: {str(e)}", exc_info=True)
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": _("Failed to import orders: %s") % str(e),
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
 
     def import_stock(self):
         """Button action to import stock levels"""
-        self.ensure_one()
-        try:
-            result = self.env["stockpilot.inventory"].import_stock_levels(self)
-
-            message = _("Stock import completed with:") + "\n"
-            message += _("- %d products updated") % result["updated"] + "\n"
-            message += _("- %d products created") % result["created"] + "\n"
-            message += _("- %d products failed") % result["failed"]
-
-            notif_type = "success"
-            if result["failed"] > 0:
-                notif_type = "warning"
-            if result["updated"] == 0 and result["created"] == 0:
-                notif_type = "danger"
-
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Stock Import Results"),
-                    "message": message,
-                    "type": notif_type,
-                    "sticky": result["failed"] > 0,
-                },
-            }
-        except Exception as e:
-            _logger.error(f"Failed to import stock: {str(e)}", exc_info=True)
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": _("Failed to import stock levels: %s") % str(e),
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
+        config = self._get_default_config()
+        if not config:
+            raise UserError(_("No configuration found for the current company"))
+        self.env["stockpilot.inventory"].with_delay().import_stock_levels(config)
 
     def export_products(self):
         """Button action to export products to Stockpilot"""
