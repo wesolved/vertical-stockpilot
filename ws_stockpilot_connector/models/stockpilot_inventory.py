@@ -85,9 +85,6 @@ class StockpilotInventory(models.Model):
             return True
 
         self._last_sync[product.id] = time.time()
-        _logger.info(
-            f"Starting sync for product: {product.id} - {product.default_code}"
-        )
 
         config = self.env["stockpilot.configuration"].get_config()
         if not config:
@@ -286,12 +283,6 @@ class StockpilotInventory(models.Model):
             )
             response.raise_for_status()
             return response.json()
-
-        error_msg = f"API request failed: {str(e)}"
-        if hasattr(e, "response") and e.response:
-            error_msg += f"\nResponse: {e.response.text}"
-        _logger.error(error_msg)
-        raise UserError(_("Stockpilot API Error: %s") % error_msg)
 
     def _scheduled_full_sync(self):
         """Periodic full synchronization"""
