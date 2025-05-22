@@ -85,9 +85,6 @@ class StockpilotInventory(models.Model):
             return True
 
         self._last_sync[product.id] = time.time()
-        _logger.info(
-            f"Starting sync for product: {product.id} - {product.default_code}"
-        )
 
         config = self.env["stockpilot.configuration"].get_config()
         if not config:
@@ -97,50 +94,45 @@ class StockpilotInventory(models.Model):
             _logger.error(f"Product {product.id} has no default code (SKU)")
             return False
 
-        try:
-            length = getattr(product, "length", 0.0)
-            width = getattr(product, "width", 0.0)
-            height = getattr(product, "height", 0.0)
-            weight = getattr(product, "weight", 0.0)
-            payload = {
-                "title": product.name,
-                "description": product.description or "",
-                "product_id": 203,
-                "item_name": product.name,
-                "sku": product.default_code,
-                "barcode": product.barcode or "N/A",
-                "barcode_type": "EAN",
-                "quantity": int(product.qty_available),
-                "moq": 1,
-                "stock_threshold": 1,
-                "purchase_price": float(product.standard_price),
-                "wholesale_price": float(product.standard_price),
-                "retail_price": float(product.list_price),
-                "weight": str(weight) if product.weight else "0",
-                "length": float(length or 0),
-                "width": float(width or 0),
-                "height": float(height or 0),
-                "condition": "NEW",
-                "vat_class": "standard_rate",
-                "is_active": product.active,
-            }
+        length = getattr(product, "length", 0.0)
+        width = getattr(product, "width", 0.0)
+        height = getattr(product, "height", 0.0)
+        weight = getattr(product, "weight", 0.0)
+        payload = {
+            "title": product.name,
+            "description": product.description or "",
+            "product_id": 203,
+            "item_name": product.name,
+            "sku": product.default_code,
+            "barcode": product.barcode or "N/A",
+            "barcode_type": "EAN",
+            "quantity": int(product.qty_available),
+            "moq": 1,
+            "stock_threshold": 1,
+            # Round these to 2 decimals
+            "purchase_price": round(float(product.standard_price), 2),
+            "wholesale_price": round(float(product.standard_price), 2),
+            "retail_price": float(product.list_price),
+            "weight": str(weight) if product.weight else "0",
+            "length": float(length or 0),
+            "width": float(width or 0),
+            "height": float(height or 0),
+            "condition": "NEW",
+            "vat_class": "standard_rate",
+            "is_active": product.active,
+        }
 
-            _logger.debug(f"Payload for {product.default_code}: {payload}")
+        _logger.debug(f"Payload for {product.default_code}: {payload}")
 
-            response = self._call_stockpilot_api(config, "inventory/create", payload)
+        response = self._call_stockpilot_api(config, "inventory/create", payload)
 
-            _logger.debug(f"API Response: {response}")
+        _logger.debug(f"API Response: {response}")
 
-            if response and response.get("product_id"):
-                _logger.info(f"Successfully synced product {product.default_code}")
-                return True
-
-            _logger.error(f"Unexpected response format for {product.default_code}")
-            return False
-
-        except Exception as e:
-            _logger.error(f"Failed to sync product {product.default_code}: {str(e)}")
-            return False
+        if response and response.get("product_id"):
+            _logger.info(f"Successfully synced product {product.default_code}")
+            product.stockpilot_id = response["product_id"]
+            product.exported_to_stockpilot = True
+            return True
 
     def _find_or_create_product(self, item, company):
         """Find or create product from inventory data"""
@@ -283,22 +275,14 @@ class StockpilotInventory(models.Model):
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
 
-        try:
-            _logger.info(f"Calling {method} {url}")
-            with requests.Session() as session:
-                session.mount("https://", adapter)
-                response = session.request(
-                    method, url, json=data, headers=headers, timeout=15
-                )
-                response.raise_for_status()
-                return response.json()
-
-        except requests.exceptions.RequestException as e:
-            error_msg = f"API request failed: {str(e)}"
-            if hasattr(e, "response") and e.response:
-                error_msg += f"\nResponse: {e.response.text}"
-            _logger.error(error_msg)
-            raise UserError(_("Stockpilot API Error: %s") % error_msg)
+        _logger.info(f"Calling {method} {url}")
+        with requests.Session() as session:
+            session.mount("https://", adapter)
+            response = session.request(
+                method, url, json=data, headers=headers, timeout=15
+            )
+            response.raise_for_status()
+            return response.json()
 
     def _scheduled_full_sync(self):
         """Periodic full synchronization"""
@@ -410,7 +394,9 @@ class StockpilotInventory(models.Model):
                     continue
 
                 processed_skus.add(sku)
-                self._process_single_item(item, sku, Product, location, results)
+                self.with_delay()._process_single_item(
+                    item, sku, Product, location, results
+                )
 
             except Exception as e:
                 results["failed"] += 1
@@ -435,7 +421,7 @@ class StockpilotInventory(models.Model):
             if not product:
                 return
 
-        self._update_product_stocks(product, location, item, results)
+        self.with_delay()._update_product_stocks(product, location, item, results)
 
     def _create_product(self, item, sku, Product, results):
         """Create new product if doesn't exist"""
@@ -464,6 +450,7 @@ class StockpilotInventory(models.Model):
             if self._update_stock_quant(product, location, qty):
                 results["updated"] += 1
                 _logger.info("Updated stock for %s to %s", product.default_code, qty)
+                product.exported_to_stockpilot = True
             else:
                 results["failed"] += 1
         except Exception as e:
