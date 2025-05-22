@@ -47,11 +47,11 @@ action = model._get_default_config()._get_config_action()
         </record>
 
         <menuitem
-        id="menu_stockpilot_main"
-        name="Stockpilot"
-        sequence="100"
-        action="action_server_load_configuration"
-        web_icon="ws_stockpilot_connector,static/description/icon.png"
-        />
+      id="menu_stockpilot_main"
+      name="Stockpilot"
+      sequence="100"
+      action="action_server_load_configuration"
+      web_icon="ws_stockpilot_connector,static/description/icon.png"
+    />
     </data>
 </odoo>
