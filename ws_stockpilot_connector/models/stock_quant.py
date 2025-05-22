@@ -1,14 +1,16 @@
-from odoo import models, api
+from odoo import models
+
 
 class StockQuant(models.Model):
-    _inherit = 'stock.quant'
+    _inherit = "stock.quant"
 
     def write(self, vals):
         """
-        Override of the write method to trigger a stock update in Stockpilot
+        Update record and schedule Stockpilot stock update if 'quantity' changes.
         """
-        res = super(StockQuant, self).write(vals)
-        if 'quantity' in vals:
-            for quant in self.filtered(lambda q: q.product_id.default_code):
-                self.env['stockpilot.inventory']._trigger_stock_update(quant.product_id)
+        res = super().write(vals)
+        if "quantity" in vals:
+            self.env["stockpilot.inventory"].with_delay(eta=30)._trigger_stock_update(
+                self.product_id
+            )
         return res
