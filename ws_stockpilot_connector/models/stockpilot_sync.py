@@ -14,6 +14,11 @@ class StockpilotSync(models.Model):
     _name = "stockpilot.sync"
     _description = "Stockpilot Synchronization"
 
+    @job
+    def _fetch_stockpilot_orders_job(self):
+        """Job queue method for fetching orders"""
+        return self._fetch_stockpilot_orders()
+
     def _get_stockpilot_orders(self, config, last_sync_date=None):
         """Fetch orders from Stockpilot API with proper error handling"""
         try:
