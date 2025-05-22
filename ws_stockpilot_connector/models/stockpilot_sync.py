@@ -5,7 +5,8 @@ import logging
 from datetime import datetime
 
 import requests
-from odoo import fields, models
+from odoo import _, fields, models
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -14,12 +15,7 @@ class StockpilotSync(models.Model):
     _name = "stockpilot.sync"
     _description = "Stockpilot Synchronization"
 
-    @job
-    def _fetch_stockpilot_orders_job(self):
-        """Job queue method for fetching orders"""
-        return self._fetch_stockpilot_orders()
-
-    def _get_stockpilot_orders(self, config, last_sync_date=None):
+    def _get_stockpilot_orders(self, config):
         """Fetch orders from Stockpilot API with proper error handling"""
         try:
             url = f"{config.base_url.rstrip('/')}/orders"
@@ -29,10 +25,7 @@ class StockpilotSync(models.Model):
             }
             params = {
                 "page": 1,
-                "page_size": 50,
-                "modified_since": (
-                    last_sync_date.isoformat() if last_sync_date else None
-                ),
+                "page_size": 100,
             }
 
             _logger.info(f"Fetching orders from {url}")
@@ -67,48 +60,32 @@ class StockpilotSync(models.Model):
 
     def _fetch_stockpilot_orders(self):
         """Fetch orders from Stockpilot with the actual API structure"""
+
         _logger.info("Starting Stockpilot order import")
 
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
             _logger.error("No Stockpilot configurations found")
-            return False
+            raise UserError(_("No Stockpilot configurations found"))
 
         for config in configs:
-            try:
-                _logger.info(f"Processing config for company: {config.company_id.name}")
+            _logger.info(f"Processing config for company: {config.company_id.name}")
 
-                # Get orders from API
-                orders = self._get_stockpilot_orders(config)
-                if not orders or not orders.get("results"):
-                    _logger.warning("No orders received from Stockpilot API")
-                    continue
+            # Get orders from API
+            orders = self._get_stockpilot_orders(config)
+            if not orders or not orders.get("results"):
+                _logger.warning("No orders received from Stockpilot API")
+                return
 
-                order_list = orders.get("results", [])
-                _logger.info(f"Received {len(order_list)} orders from Stockpilot")
+            order_list = orders.get("results", [])
+            _logger.info(f"Received {len(order_list)} orders from Stockpilot")
 
-                success_count = 0
-                for order_data in order_list:
-                    try:
-                        if self._process_stockpilot_order(
-                            order_data, config.company_id
-                        ):
-                            success_count += 1
-                    except Exception as e:
-                        _logger.error(
-                            f"Failed {order_data.get('order_number')}: {str(e)}"
-                        )
-
-                _logger.info(
-                    f"Successfully imported {success_count}/{len(order_list)} orders"
+            for order_data in order_list:
+                self.with_delay()._process_stockpilot_order(
+                    order_data, config.company_id
                 )
-                config.last_sync_date = datetime.now()
 
-            except Exception as e:
-                _logger.error(f"Error processing config {config.id}: {str(e)}")
-                continue
-
-        return True
+            return f"Successfully Created Tasks to process orders"
 
     def _process_stockpilot_order(self, order_data, company):
         """Process a single Stockpilot order with fixed datetime handling"""
@@ -142,7 +119,7 @@ class StockpilotSync(models.Model):
             # Prepare order values
             order_vals = {
                 "stockpilot_order_id": order_data.get("id"),
-                "client_order_ref": order_data.get("order_number"),
+                "name": order_data.get("order_number"),
                 "partner_id": partner.id,
                 "date_order": order_date,
                 "company_id": company.id,

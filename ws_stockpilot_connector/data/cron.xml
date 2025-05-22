@@ -17,6 +17,6 @@
         <field name="code">model._scheduled_full_sync()</field>
         <field name="interval_number">6</field>
         <field name="interval_type">hours</field>
-        <field name="active">True</field>
+        <field name="active">False</field>
     </record>
 </odoo>

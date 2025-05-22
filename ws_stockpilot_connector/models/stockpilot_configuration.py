@@ -6,7 +6,6 @@ import logging
 import requests
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
-from odoo.addons.queue_job.job import job
 
 _logger = logging.getLogger(__name__)
 
@@ -14,6 +13,11 @@ _logger = logging.getLogger(__name__)
 class StockpilotConfiguration(models.Model):
     _name = "stockpilot.configuration"
     _description = "Stockpilot Configuration"
+
+    name = fields.Char(
+        string="Name",
+        required=True,
+    )
 
     api_client_id = fields.Char(
         string="API Client ID", default="f9e56e88-14e1-4fc0-8089-04aba8e6088b"
@@ -37,34 +41,42 @@ class StockpilotConfiguration(models.Model):
     )
 
     _sql_constraints = [
-        ('company_uniq', 'unique(company_id)', 'Only one configuration per company allowed!'),
+        (
+            "company_uniq",
+            "unique(company_id)",
+            "Only one configuration per company allowed!",
+        ),
     ]
 
     @api.model
     def _get_default_config(self):
         """Get or create default configuration for current company"""
         company_id = self.env.company.id
-        config = self.search([('company_id', '=', company_id)], limit=1)
+        config = self.search([("company_id", "=", company_id)], limit=1)
         if not config:
-            config = self.create({
-                'company_id': company_id,
-                'api_client_id': 'f9e56e88-14e1-4fc0-8089-04aba8e6088b',
-                'api_client_secret': '4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f',
-                'base_url': 'https://api.stockpilot.dev',
-                'environment': 'test',
-            })
+            config = self.create(
+                {
+                    "company_id": company_id,
+                    "api_client_id": "f9e56e88-14e1-4fc0-8089-04aba8e6088b",
+                    "api_client_secret": (
+                        "4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f"
+                    ),
+                    "base_url": "https://api.stockpilot.dev",
+                    "environment": "test",
+                }
+            )
         return config
 
     def _get_config_action(self):
         """Return action to open the configuration form"""
         config = self._get_default_config()
         return {
-            'type': 'ir.actions.act_window',
-            'res_model': self._name,
-            'view_mode': 'form',
-            'res_id': config.id,
-            'target': 'current',
-            'context': {'form_view_initial_mode': 'edit'},
+            "type": "ir.actions.act_window",
+            "res_model": self._name,
+            "view_mode": "form",
+            "res_id": config.id,
+            "target": "current",
+            "context": {"form_view_initial_mode": "edit"},
         }
 
     def _verify_credentials(self):
@@ -137,97 +149,30 @@ class StockpilotConfiguration(models.Model):
         return self.search([("company_id", "=", company_id)], limit=1)
 
     def import_orders(self):
-        """Button action to import orders from Stockpilot with job queue"""
+        """Button action to import orders from Stockpilot with detailed logging"""
         self.ensure_one()
         try:
-            _logger.info("Enqueueing order import from Stockpilot")
-            self.with_delay()._import_orders_job()
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Success"),
-                    "message": _("Order import has been queued in the background"),
-                    "type": "success",
-                    "sticky": False,
-                },
-            }
-        except Exception as e:
-            _logger.error(f"Failed to enqueue order import: {str(e)}")
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": _("Failed to queue order import: %s") % str(e),
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
+            _logger.info("Starting order import from Stockpilot")
 
-    @job
-    def _import_orders_job(self):
-        """Job queue method for importing orders"""
-        sync_model = self.env["stockpilot.sync"].with_context(job_running=True)
-        sync_model._fetch_stockpilot_orders()
+            # Get the sync model
+            sync_model = self.env["stockpilot.sync"]
+
+            # Execute the import
+            result = sync_model.with_delay()._fetch_stockpilot_orders()
+
+            if not result:
+                _logger.error("Order import returned False/None - possible failure")
+
+            _logger.info("Orders imported successfully")
+        except Exception as e:
+            _logger.error(f"Failed to import orders: {str(e)}", exc_info=True)
 
     def import_stock(self):
-        """Button action to import stock levels with job queue"""
-        self.ensure_one()
-        try:
-            _logger.info("Enqueueing stock import from Stockpilot")
-            self.with_delay()._import_stock_job()
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Success"),
-                    "message": _("Stock import has been queued in the background"),
-                    "type": "success",
-                    "sticky": False,
-                },
-            }
-        except Exception as e:
-            _logger.error(f"Failed to enqueue stock import: {str(e)}")
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": _("Failed to queue stock import: %s") % str(e),
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
-
-    @job
-    def _import_stock_job(self):
-        """Job queue method for importing stock"""
-        inventory_model = self.env["stockpilot.inventory"].with_context(job_running=True)
-        inventory_model.import_stock_levels(self)
-
-    @job
-    def _export_products_job(self):
-        """Job queue method for exporting products"""
-        inventory_model = self.env["stockpilot.inventory"].with_context(job_running=True)
-        success_count = 0
-        fail_count = 0
-        products = self.env["product.product"].search([
-            ("type", "=", "product"),
-            ("default_code", "!=", False),
-            ("active", "=", True),
-        ])
-
-        for product in products:
-            try:
-                if inventory_model._trigger_stock_update(product):
-                    success_count += 1
-                else:
-                    fail_count += 1
-            except Exception:
-                fail_count += 1
-
-        _logger.info(f"Export completed: {success_count} successful, {fail_count} failed")
+        """Button action to import stock levels"""
+        config = self._get_default_config()
+        if not config:
+            raise UserError(_("No configuration found for the current company"))
+        self.env["stockpilot.inventory"].with_delay().import_stock_levels(config)
 
     def export_products(self):
         """Button action to export products to Stockpilot"""
