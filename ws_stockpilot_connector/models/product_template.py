@@ -2,8 +2,9 @@
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import fields, models
 import logging
+
+from odoo import fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -11,9 +12,9 @@ _logger = logging.getLogger(__name__)
 class ProductTemplate(models.Model):
     _inherit = "product.template"
 
-    stockpilot_id = fields.Char(string='Stockpilot Product ID', copy=False)
+    stockpilot_id = fields.Char(string="Stockpilot Product ID", copy=False)
     exported_to_stockpilot = fields.Boolean(
-        string='Exported to Stockpilot', default=False
+        string="Exported to Stockpilot", default=False
     )
 
     def _export_product_template(self, product_tmpl):
@@ -45,4 +46,3 @@ class ProductTemplate(models.Model):
         else:
             _logger.error(f"Failed to export product template {product_tmpl.id}")
             return False
-

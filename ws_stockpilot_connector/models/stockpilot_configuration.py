@@ -209,9 +209,9 @@ class StockpilotConfiguration(models.Model):
 
             # Execute the import
             result = (
-                inventory_model.with_context(stockpilot_config=self).
-                with_delay().
-                import_stockpilot_products()
+                inventory_model.with_context(stockpilot_config=self)
+                .with_delay()
+                .import_stockpilot_products()
             )
 
             if isinstance(result, dict):
@@ -222,7 +222,7 @@ class StockpilotConfiguration(models.Model):
                     success_count + fail_count,
                     result.get("created", 0),
                     result.get("updated", 0),
-                    fail_count
+                    fail_count,
                 )
             else:
                 _logger.warning(
