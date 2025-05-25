@@ -85,7 +85,7 @@ class StockpilotSync(models.Model):
                     order_data, config.company_id
                 )
 
-            return f"Successfully Created Tasks to process orders"
+        return f"Successfully Created Tasks to process orders"
 
     def _process_stockpilot_order(self, order_data, company):
         """Process a single Stockpilot order with fixed datetime handling"""

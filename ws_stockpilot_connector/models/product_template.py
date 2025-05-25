@@ -38,9 +38,6 @@ class ProductTemplate(models.Model):
         response = self._call_stockpilot_api(config, "product/create", payload)
 
         if response and response.get("product_id"):
-            _logger.info(
-                f"Template exported: {product_tmpl.id} -> Stockpilot ID {response['product_id']}"
-            )
             product_tmpl.stockpilot_id = response["product_id"]
             return response["product_id"]
         else:

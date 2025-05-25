@@ -218,7 +218,7 @@ class StockpilotConfiguration(models.Model):
                 success_count = result.get("created", 0) + result.get("updated", 0)
                 fail_count = result.get("failed", 0)
                 _logger.info(
-                    "Import completed: %d products processed (%d created, %d updated, %d failed)",
+                    "Import: %d products (%d created, %d updated, %d failed)",
                     success_count + fail_count,
                     result.get("created", 0),
                     result.get("updated", 0),

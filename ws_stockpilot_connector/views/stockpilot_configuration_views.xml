@@ -20,15 +20,15 @@
             string="Archive"
             attrs="{'invisible': [('active', '=', False)]}"
             class="oe_stat_button"
-           />
+          />
 
                     <button
-           name="unlink"
-           type="object"
-           class="oe_stat_button"
-           icon="fa-trash"
-           string="Delete"
-           attrs="{'invisible': [('active', '=', True)]}"
+            name="unlink"
+            type="object"
+            class="oe_stat_button"
+            icon="fa-trash"
+            string="Delete"
+            attrs="{'invisible': [('active', '=', True)]}"
           />
                 </tree>
             </field>
