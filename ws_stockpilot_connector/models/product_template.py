@@ -2,8 +2,7 @@
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import models, fields, api, _
-from odoo.exceptions import UserError
+from odoo import fields, models
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -13,7 +12,9 @@ class ProductTemplate(models.Model):
     _inherit = "product.template"
 
     stockpilot_id = fields.Char(string='Stockpilot Product ID', copy=False)
-    exported_to_stockpilot = fields.Boolean(string='Exported to Stockpilot', default=False)
+    exported_to_stockpilot = fields.Boolean(
+        string='Exported to Stockpilot', default=False
+    )
 
     def _export_product_template(self, product_tmpl):
         config = self.env["stockpilot.configuration"].get_config()
@@ -36,7 +37,9 @@ class ProductTemplate(models.Model):
         response = self._call_stockpilot_api(config, "product/create", payload)
 
         if response and response.get("product_id"):
-            _logger.info(f"Template exported: {product_tmpl.id} -> Stockpilot ID {response['product_id']}")
+            _logger.info(
+                f"Template exported: {product_tmpl.id} -> Stockpilot ID {response['product_id']}"
+            )
             product_tmpl.stockpilot_id = response["product_id"]
             return response["product_id"]
         else:

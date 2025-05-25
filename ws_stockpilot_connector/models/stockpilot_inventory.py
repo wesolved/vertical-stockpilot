@@ -3,7 +3,7 @@ import logging
 import time
 
 import requests
-from odoo import _, fields, models
+from odoo import _, models
 from odoo.exceptions import UserError
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -65,25 +65,19 @@ class StockpilotInventory(models.Model):
 
                 _logger.info("Creating product header...")
                 header_response = self._call_stockpilot_api(
-                    config,
-                    "/products/create",
-                    product_header_payload,
-                    method="POST"
+                    config, "/products/create", product_header_payload, method="POST"
                 )
 
-                if not header_response or not header_response.get('product_id'):
+                if not header_response or not header_response.get("product_id"):
                     _logger.error("Product header creation failed")
                     return False
 
-                product_id = header_response['product_id']
+                product_id = header_response["product_id"]
 
                 # Verify the product exists
                 try:
                     verify_response = self._call_stockpilot_api(
-                        config,
-                        "/products/get",
-                        method="GET",
-                        params={"id": product_id}
+                        config, "/products/get", method="GET", params={"id": product_id}
                     )
                     if not verify_response:
                         _logger.error(f"Product {product_id} verification failed")
@@ -110,7 +104,7 @@ class StockpilotInventory(models.Model):
                                 config,
                                 "/inventory/get",
                                 method="GET",
-                                params={"id": variant.stockpilot_id}
+                                params={"id": variant.stockpilot_id},
                             )
                         except:
                             existing_inventory = None
@@ -122,7 +116,7 @@ class StockpilotInventory(models.Model):
                                 config,
                                 "/inventory/get",
                                 method="GET",
-                                params={"sku": variant_code, "barcode": barcode}
+                                params={"sku": variant_code, "barcode": barcode},
                             )
                         except:
                             existing_inventory = None
@@ -130,7 +124,9 @@ class StockpilotInventory(models.Model):
                     inventory_payload = {
                         "product_id": product_id,
                         "title": variant.name,
-                        "description": variant.description or product_template.description or "",
+                        "description": variant.description
+                        or product_template.description
+                        or "",
                         "item_name": variant.name,
                         "sku": variant_code,
                         "barcode": barcode,
@@ -147,14 +143,14 @@ class StockpilotInventory(models.Model):
                         "is_active": variant.active,
                     }
 
-                    if existing_inventory and existing_inventory.get('id'):
+                    if existing_inventory and existing_inventory.get("id"):
                         # Update existing
-                        inventory_payload["product_id"] = existing_inventory['id']
+                        inventory_payload["product_id"] = existing_inventory["id"]
                         response = self._call_stockpilot_api(
                             config,
                             "/inventory/update",
                             inventory_payload,
-                            method="POST"
+                            method="POST",
                         )
                         action = "update"
                     else:
@@ -163,17 +159,21 @@ class StockpilotInventory(models.Model):
                             config,
                             "/inventory/create",
                             inventory_payload,
-                            method="POST"
+                            method="POST",
                         )
                         action = "create"
 
                     if response and response.get("product_id"):
                         variant.stockpilot_id = response["product_id"]
                         variant.exported_to_stockpilot = True
-                        _logger.info(f"Successfully {action}d inventory for {variant_code}")
+                        _logger.info(
+                            f"Successfully {action}d inventory for {variant_code}"
+                        )
                     else:
                         all_success = False
-                        _logger.error(f"Failed to {action} inventory for {variant_code}")
+                        _logger.error(
+                            f"Failed to {action} inventory for {variant_code}"
+                        )
 
                 except Exception as e:
                     _logger.error(f"Error processing variant {variant_code}: {str(e)}")
@@ -249,9 +249,11 @@ class StockpilotInventory(models.Model):
             _logger.error(f"Failed to update stock: {str(e)}")
             return False
 
-    def _call_stockpilot_api(self, config, endpoint, data=None, method="POST", params=None):
+    def _call_stockpilot_api(
+            self, config, endpoint, data=None, method="POST", params=None
+    ):
         """Enhanced API call that handles both POST and GET requests"""
-        base_url = config.base_url.rstrip('/')
+        base_url = config.base_url.rstrip(""/"")
         url = f"{base_url}{endpoint}"
 
         headers = {
@@ -273,33 +275,30 @@ class StockpilotInventory(models.Model):
                     total=3,
                     backoff_factor=1,
                     status_forcelist=[500, 502, 503, 504],
-                    allowed_methods=["GET", "POST", "PUT"]
+                    allowed_methods=["GET", "POST", "PUT"],
                 )
                 adapter = HTTPAdapter(max_retries=retry_strategy)
                 session.mount("https://", adapter)
 
                 if method.upper() == "GET":
                     response = session.get(
-                        url,
-                        headers=headers,
-                        params=params,
-                        timeout=15
+                        url, headers=headers, params=params, timeout=15
                     )
                 else:
                     response = session.request(
-                        method,
-                        url,
-                        json=data,
-                        headers=headers,
-                        timeout=15
+                        method, url, json=data, headers=headers, timeout=15
                     )
 
                 response.raise_for_status()
-                _logger.info(f"[Stockpilot] Response: {response.status_code} {response.text}")
+                _logger.info(
+                    f"[Stockpilot] Response: {response.status_code} {response.text}"
+                )
                 return response.json()
 
         except requests.exceptions.RequestException as e:
-            error_msg = f"Stockpilot API Error: {e.response.status_code} {e.response.reason}"
+            error_msg = (
+                f"Stockpilot API Error: {e.response.status_code} {e.response.reason}"
+            )
             if e.response.text:
                 error_msg += f"\n{e.response.text}"
             _logger.error(error_msg)
@@ -347,27 +346,31 @@ class StockpilotInventory(models.Model):
         if not config:
             raise UserError(_("No Stockpilot configuration found"))
 
-        results = {'created': 0, 'updated': 0, 'failed': 0}
+        results = {"created": 0, "updated": 0, "failed": 0}
 
         # Get all products we know about in Stockpilot
-        known_products = self.env["product.template"].search([
-            ("stockpilot_id", "!=", False)
-        ])
+        known_products = self.env["product.template"].search(
+            [("stockpilot_id", "!=", False)]
+        )
 
         for product in known_products:
             try:
                 # 1. Get product data
                 product_data = self._get_product_by_id(config, product.stockpilot_id)
                 if not product_data:
-                    results['failed'] += 1
+                    results["failed"] += 1
                     continue
 
                 # 2. Update product data
-                product.write({
-                    'name': product_data.get('title', product.name),
-                    'description': product_data.get('description', product.description),
-                    'active': product_data.get('is_active', product.active)
-                })
+                product.write(
+                    {
+                        'name': product_data.get('title', product.name),
+                        'description': product_data.get(
+                            'description', product.description
+                        ),
+                        'active': product_data.get('is_active', product.active)
+                    }
+                )
 
                 # 3. Process inventory for each variant
                 for variant in product.product_variant_ids:
@@ -377,11 +380,12 @@ class StockpilotInventory(models.Model):
                         if variant.stockpilot_id:
                             try:
                                 inventory_data = self._get_inventory_item(
-                                    config,
-                                    id=variant.stockpilot_id
+                                    config, id=variant.stockpilot_id
                                 )
                             except Exception as e:
-                                _logger.debug(f"Failed to get inventory by ID {variant.stockpilot_id}: {str(e)}")
+                                _logger.debug(
+                                    f"Failed to get inventory by ID {variant.stockpilot_id}: {str(e)}"
+                                )
 
                         # If not found by ID, try by SKU or barcode
                         if not inventory_data:
@@ -389,32 +393,42 @@ class StockpilotInventory(models.Model):
                                 inventory_data = self._get_inventory_item(
                                     config,
                                     sku=variant.default_code,
-                                    barcode=variant.barcode
+                                    barcode=variant.barcode,
                                 )
                             except Exception as e:
-                                _logger.debug(f"Failed to get inventory by SKU/barcode: {str(e)}")
+                                _logger.debug(
+                                    f"Failed to get inventory by SKU/barcode: {str(e)}"
+                                )
 
                         if inventory_data:
-                            self._process_inventory_item(product, inventory_data, results)
-                            results['updated'] += 1
+                            self._process_inventory_item(
+                                product, inventory_data, results
+                            )
+                            results["updated"] += 1
                         else:
-                            _logger.warning(f"No inventory data found for variant {variant.id}")
-                            results['failed'] += 1
+                            _logger.warning(
+                                f"No inventory data found for variant {variant.id}"
+                            )
+                            results["failed"] += 1
 
                     except Exception as e:
-                        results['failed'] += 1
-                        _logger.error(f"Error processing variant {variant.id}: {str(e)}", exc_info=True)
+                        results["failed"] += 1
+                        _logger.error(
+                            f"Error processing variant {variant.id}: {str(e)}", exc_info=True
+                        )
 
             except Exception as e:
-                results['failed'] += 1
-                _logger.error(f"Error processing product {product.stockpilot_id}: {str(e)}", exc_info=True)
+                results["failed"] += 1
+                _logger.error(
+                    f"Error processing product {product.stockpilot_id}: {str(e)}", exc_info=True
+                )
 
         return results
 
     def _get_inventory_item(self, config, **kwargs):
         """Get inventory item by ID, SKU, or barcode"""
         valid_params = {}
-        for param in ['id', 'sku', 'barcode']:
+        for param in ["id", "sku", "barcode"]:
             if param in kwargs and kwargs[param]:
                 valid_params[param] = kwargs[param]
 
@@ -422,42 +436,42 @@ class StockpilotInventory(models.Model):
             raise ValueError("At least one of id, sku, or barcode must be provided")
 
         return self._call_stockpilot_api(
-            config,
-            "/inventory/get",
-            method="GET",
-            params=valid_params
+            config, "/inventory/get", method="GET", params=valid_params
         )
 
     def _get_product_by_id(self, config, product_id):
         """Get single product by ID"""
         return self._call_stockpilot_api(
-            config,
-            "/products/get",
-            method="GET",
-            params={"id": product_id}
+            config, "/products/get", method="GET", params={"id": product_id}
         )
 
     def _process_inventory_item(self, product_template, item_data, results=None):
         """Process single inventory item with duplicate variant checking"""
         # First try to find by stockpilot_id
-        variant = self.env["product.product"].search([
-            ("stockpilot_id", "=", item_data.get("id")),
-            ("product_tmpl_id", "=", product_template.id)
-        ], limit=1)
+        variant = self.env["product.product"].search(
+            [
+                ("stockpilot_id", "=", item_data.get("id")),
+                ("product_tmpl_id", "=", product_template.id)
+            ],
+            limit=1,
+        )
 
         # If not found by stockpilot_id, try to find by SKU
         if not variant and item_data.get("sku"):
-            variant = self.env["product.product"].search([
-                ("default_code", "=", item_data.get("sku")),
-                ("product_tmpl_id", "=", product_template.id)
-            ], limit=1)
+            variant = self.env["product.product"].search(
+                [
+                    ("default_code", "=", item_data.get("sku")),
+                    ("product_tmpl_id", "=", product_template.id)
+                ],
+                limit=1
+            )
 
         try:
             # Handle barcode uniqueness
             barcode = item_data.get("barcode")
             if barcode == "N/A":
                 barcode = False
-            elif barcode and self.env["product.product"].search_count([("barcode", "=", barcode)]) > 0:
+            elif (barcode and self.env["product.product"].search_count([("barcode", "=", barcode)]) > 0):
                 barcode = f"{barcode}-{item_data.get('id')}"
 
             vals = {
@@ -553,15 +567,17 @@ class StockpilotInventory(models.Model):
 
     def _create_product_from_stockpilot(self, product_data):
         """Create new product template from Stockpilot data"""
-        return self.env["product.template"].create({
-            "name": product_data["title"],
-            "description": product_data.get("description", ""),
-            "type": "product",
-            "default_code": product_data.get("sku"),
-            "stockpilot_id": product_data["id"],
-            "exported_to_stockpilot": True,
-            "categ_id": self._get_or_create_category(product_data.get("category")),
-        })
+        return self.env["product.template"].create(
+            {
+                "name": product_data["title"],
+                "description": product_data.get("description", ""),
+                "type": "product",
+                "default_code": product_data.get("sku"),
+                "stockpilot_id": product_data["id"],
+                "exported_to_stockpilot": True,
+                "categ_id": self._get_or_create_category(product_data.get("category")),
+            }
+        )
 
     def _process_product_variants(self, config, product_template, product_id):
         """Process all variants for a product"""
@@ -571,7 +587,10 @@ class StockpilotInventory(models.Model):
             try:
                 self._process_inventory_item(product_template, item)
             except Exception as e:
-                _logger.error(f"Error processing inventory item {item.get('id')}: {str(e)}", exc_info=True)
+                _logger.error(
+                    f"Error processing inventory item {item.get('id')}: {str(e)}",
+                    exc_info=True
+                )
                 continue
 
     def _get_stockpilot_inventory(self, config, product_id):
@@ -581,7 +600,7 @@ class StockpilotInventory(models.Model):
                 config,
                 "/inventory/get",
                 method="GET",
-                params={"product_id": product_id}
+                params={"product_id": product_id},
             )
             return response if response else []
         except Exception as e:
@@ -604,31 +623,31 @@ class StockpilotInventory(models.Model):
 
     def _create_product_variant(self, product_template, item_data):
         """Create new product variant"""
-        return self.env["product.product"].create({
-            "product_tmpl_id": product_template.id,
-            "default_code": item_data.get("sku"),
-            "barcode": item_data.get("barcode"),
-            "standard_price": item_data.get("purchase_price", 0),
-            "list_price": item_data.get("retail_price", 0),
-            "weight": float(item_data.get("weight", 0)),
-            "qty_available": item_data.get("quantity", 0),
-            "stockpilot_id": item_data["id"],
-            "exported_to_stockpilot": True,
-        })
+        return self.env["product.product"].create(
+            {
+                "product_tmpl_id": product_template.id,
+                "default_code": item_data.get("sku"),
+                "barcode": item_data.get("barcode"),
+                "standard_price": item_data.get("purchase_price", 0),
+                "list_price": item_data.get("retail_price", 0),
+                "weight": float(item_data.get("weight", 0)),
+                "qty_available": item_data.get("quantity", 0),
+                "stockpilot_id": item_data["id"],
+                "exported_to_stockpilot": True,
+            }
+        )
 
     def _get_or_create_category(self, category_name):
         """Get or create product category"""
         if not category_name:
             return self.env.ref("product.product_category_all").id
 
-        category = self.env["product.category"].search([
-            ("name", "=", category_name)
-        ], limit=1)
+        category = self.env["product.category"].search(
+            [("name", "=", category_name)], limit=1
+        )
 
         if not category:
-            category = self.env["product.category"].create({
-                "name": category_name
-            })
+            category = self.env["product.category"].create({"name": category_name})
 
         return category.id
 
@@ -652,7 +671,6 @@ class StockpilotInventory(models.Model):
         except Exception as e:
             _logger.error("Failed to get inventory: %s", str(e), exc_info=True)
             raise UserError(_("Failed to fetch inventory: %s") % str(e))
-
 
     def _process_single_item(self, item, sku, Product, location, results):
         """Handle processing of a single inventory item"""

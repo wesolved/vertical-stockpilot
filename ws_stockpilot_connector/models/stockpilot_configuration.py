@@ -55,17 +55,21 @@ class StockpilotConfiguration(models.Model):
 
     def toggle_active(self):
         """Standard method name that works with Odoo's built-in archive/unarchive"""
-        self.write({'active': not self.active})
+        self.write({"active": not self.active})
         return True
 
     def toggle_active_view(self):
         return {
-            'type': 'ir.actions.act_window',
-            'name': 'Configurations',
-            'res_model': 'stockpilot.configuration',
-            'view_mode': 'tree,form',
-            'context': {'search_default_active': not self.env.context.get('search_default_active', True)},
-            'domain': [],
+            "type": "ir.actions.act_window",
+            "name": "Configurations",
+            "res_model": "stockpilot.configuration",
+            "view_mode": "tree,form",
+            "contex": {
+                "search_default_active": not self.env.context.get(
+                    "search_default_active", True
+                )
+            },
+            "domain": [],
         }
 
     def unlink(self):
@@ -204,20 +208,26 @@ class StockpilotConfiguration(models.Model):
             inventory_model = self.env["stockpilot.inventory"]
 
             # Execute the import
-            result = inventory_model.with_context(stockpilot_config=self).with_delay().import_stockpilot_products()
+            result = (
+                inventory_model.with_context(stockpilot_config=self).
+                with_delay().
+                import_stockpilot_products()
+            )
 
             if isinstance(result, dict):
-                success_count = result.get('created', 0) + result.get('updated', 0)
-                fail_count = result.get('failed', 0)
+                success_count = result.get("created", 0) + result.get("updated", 0)
+                fail_count = result.get("failed", 0)
                 _logger.info(
                     "Import completed: %d products processed (%d created, %d updated, %d failed)",
                     success_count + fail_count,
-                    result.get('created', 0),
-                    result.get('updated', 0),
+                    result.get("created", 0),
+                    result.get("updated", 0),
                     fail_count
                 )
             else:
-                _logger.warning("Import completed with unexpected results: %s", str(result))
+                _logger.warning(
+                    "Import completed with unexpected results: %s", str(result)
+                )
                 fail_count = 1
 
             return True
@@ -248,15 +258,25 @@ class StockpilotConfiguration(models.Model):
 
             for product in products:
                 try:
-                    if self.env["stockpilot.inventory"].with_delay()._trigger_stock_update(product):
+                    if (
+                        self.env["stockpilot.inventory"]
+                        .with_delay()
+                        ._trigger_stock_update(product)
+                    ):
                         success_count += 1
-                        _logger.info(f"Successfully exported product {product.default_code}")
+                        _logger.info(
+                            f"Successfully exported product {product.default_code}"
+                        )
                     else:
                         fail_count += 1
-                        _logger.warning(f"Failed to export product {product.default_code}")
+                        _logger.warning(
+                            f"Failed to export product {product.default_code}"
+                        )
                 except Exception as e:
                     fail_count += 1
-                    _logger.error(f"Error exporting product {product.default_code}: {str(e)}")
+                    _logger.error(
+                        f"Error exporting product {product.default_code}: {str(e)}"
+                    )
 
             _logger.info(
                 f"Export completed: {success_count} successful, {fail_count} failed"
