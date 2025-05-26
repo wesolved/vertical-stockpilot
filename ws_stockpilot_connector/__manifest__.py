@@ -19,6 +19,7 @@
         "security/security.xml",
         "security/ir.model.access.csv",
         "views/stockpilot_configuration_views.xml",
+        "views/product_template_views.xml",
         "views/product_product_views.xml",
         "views/sale_order_views.xml",
     ],
