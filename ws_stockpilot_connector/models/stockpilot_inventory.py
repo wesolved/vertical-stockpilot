@@ -48,7 +48,9 @@ class StockpilotInventory(models.Model):
             if not product_id:
                 return False
 
-            return self._process_variants(config, product_template, product_id, default_code)
+            return self._process_variants(
+                config, product_template, product_id, default_code
+            )
 
         except Exception as e:
             _logger.error(f"Sync failed: {str(e)}", exc_info=True)
@@ -69,17 +71,14 @@ class StockpilotInventory(models.Model):
 
             _logger.info("Creating product header...")
             header_response = self._call_stockpilot_api(
-                config,
-                "/products/create",
-                product_header_payload,
-                method="POST"
+                config, "/products/create", product_header_payload, method="POST"
             )
 
-            if not header_response or not header_response.get('product_id'):
+            if not header_response or not header_response.get("product_id"):
                 _logger.error("Product header creation failed")
                 return False
 
-            product_id = header_response['product_id']
+            product_id = header_response["product_id"]
             if not self._verify_product(config, product_id):
                 return False
 
@@ -92,10 +91,7 @@ class StockpilotInventory(models.Model):
         """Verify product exists in Stockpilot"""
         try:
             verify_response = self._call_stockpilot_api(
-                config,
-                "/products/get",
-                method="GET",
-                params={"id": product_id}
+                config, "/products/get", method="GET", params={"id": product_id}
             )
             if not verify_response:
                 _logger.error(f"Product {product_id} verification failed")
@@ -134,9 +130,9 @@ class StockpilotInventory(models.Model):
                 variant, product_id, variant_code, barcode
             )
 
-            if existing_inventory and existing_inventory.get('id'):
+            if existing_inventory and existing_inventory.get("id"):
                 return self._update_inventory(
-                    config, existing_inventory['id'], inventory_payload, variant_code
+                    config, existing_inventory["id"], inventory_payload, variant_code
                 )
             else:
                 return self._create_inventory(
@@ -155,9 +151,9 @@ class StockpilotInventory(models.Model):
                     config,
                     "/inventory/get",
                     method="GET",
-                    params={"id": variant.stockpilot_id}
+                    params={"id": variant.stockpilot_id},
                 )
-            except:
+            except Exception as e:
                 pass
 
         try:
@@ -165,9 +161,9 @@ class StockpilotInventory(models.Model):
                 config,
                 "/inventory/get",
                 method="GET",
-                params={"sku": variant_code, "barcode": barcode}
+                params={"sku": variant_code, "barcode": barcode},
             )
-        except:
+        except Exception as e:
             return None
 
     def _prepare_inventory_payload(self, variant, product_id, variant_code, barcode):
@@ -196,10 +192,7 @@ class StockpilotInventory(models.Model):
         """Update existing inventory item"""
         payload["product_id"] = inventory_id
         response = self._call_stockpilot_api(
-            config,
-            "/inventory/update",
-            payload,
-            method="POST"
+            config, "/inventory/update", payload, method="POST"
         )
         if response and response.get("product_id"):
             _logger.info(f"Successfully updated inventory for {variant_code}")
@@ -210,10 +203,7 @@ class StockpilotInventory(models.Model):
     def _create_inventory(self, config, payload, variant, variant_code):
         """Create new inventory item"""
         response = self._call_stockpilot_api(
-            config,
-            "/inventory/create",
-            payload,
-            method="POST"
+            config, "/inventory/create", payload, method="POST"
         )
         if response and response.get("product_id"):
             variant.stockpilot_id = response["product_id"]
@@ -449,14 +439,14 @@ class StockpilotInventory(models.Model):
                         results["failed"] += 1
                         _logger.error(
                             f"Error processing variant {variant.id}: {str(e)}",
-                            exc_info=True
+                            exc_info=True,
                         )
 
             except Exception as e:
                 results["failed"] += 1
                 _logger.error(
                     f"Error processing product {product.stockpilot_id}: {str(e)}",
-                    exc_info=True
+                    exc_info=True,
                 )
 
         return results
