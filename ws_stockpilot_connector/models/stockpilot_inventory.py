@@ -153,7 +153,7 @@ class StockpilotInventory(models.Model):
                     method="GET",
                     params={"id": variant.stockpilot_id},
                 )
-            except Exception as e:
+            except Exception:
                 pass
 
         try:
@@ -163,7 +163,7 @@ class StockpilotInventory(models.Model):
                 method="GET",
                 params={"sku": variant_code, "barcode": barcode},
             )
-        except Exception as e:
+        except Exception:
             return None
 
     def _prepare_inventory_payload(self, variant, product_id, variant_code, barcode):
