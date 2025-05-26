@@ -27,9 +27,7 @@ class StockpilotInventory(models.Model):
         return True
 
     def _trigger_stock_update(self, product, template_id=None):
-        """
-        Updated and created products
-        """
+        """Handle product and inventory synchronization with Stockpilot (refactored)"""
         product_template = product.product_tmpl_id
 
         if not self._should_sync_product(product_template):
@@ -46,145 +44,184 @@ class StockpilotInventory(models.Model):
             return False
 
         try:
-            # STEP 1: Handle Product Header
-            product_id = product_template.stockpilot_id
-
+            product_id = self._handle_product_header(config, product_template)
             if not product_id:
-                # Create product header
-                product_header_payload = {
-                    "title": product_template.name,
-                    "description": product_template.description or "",
-                    "brand": 1,
-                    "category": 1,
-                    "is_active": product_template.active,
-                }
+                return False
 
-                _logger.info("Creating product header...")
-                header_response = self._call_stockpilot_api(
-                    config, "/products/create", product_header_payload, method="POST"
-                )
-
-                if not header_response or not header_response.get("product_id"):
-                    _logger.error("Product header creation failed")
-                    return False
-
-                product_id = header_response["product_id"]
-
-                # Verify the product exists
-                try:
-                    verify_response = self._call_stockpilot_api(
-                        config, "/products/get", method="GET", params={"id": product_id}
-                    )
-                    if not verify_response:
-                        _logger.error(f"Product {product_id} verification failed")
-                        return False
-                except Exception as e:
-                    _logger.error(f"Product verification error: {str(e)}")
-                    return False
-
-                product_template.stockpilot_id = product_id
-                _logger.info(f"Verified product header with ID: {product_id}")
-
-            # STEP 2: Handle Inventory Items
-            all_success = True
-            for variant in product_template.product_variant_ids:
-                variant_code = variant.default_code or default_code
-                barcode = variant.barcode or product_template.barcode or "N/A"
-
-                try:
-                    # Check if inventory exists
-                    existing_inventory = None
-                    if variant.stockpilot_id:
-                        try:
-                            existing_inventory = self._call_stockpilot_api(
-                                config,
-                                "/inventory/get",
-                                method="GET",
-                                params={"id": variant.stockpilot_id},
-                            )
-                        except Exception:
-                            existing_inventory = None
-
-
-
-                    if not existing_inventory:
-                        # Try finding by SKU or barcode
-                        try:
-                            existing_inventory = self._call_stockpilot_api(
-                                config,
-                                "/inventory/get",
-                                method="GET",
-                                params={"sku": variant_code, "barcode": barcode},
-                            )
-                        except Exception:
-                            existing_inventory = None
-
-                    inventory_payload = {
-                        "product_id": product_id,
-                        "title": variant.name,
-                        "description": variant.description
-                        or product_template.description
-                        or "",
-                        "item_name": variant.name,
-                        "sku": variant_code,
-                        "barcode": barcode,
-                        "barcode_type": "EAN",
-                        "quantity": int(variant.qty_available),
-                        "moq": 1,
-                        "stock_threshold": 1,
-                        "purchase_price": round(float(variant.standard_price), 2),
-                        "wholesale_price": round(float(variant.standard_price), 2),
-                        "retail_price": float(variant.list_price),
-                        "weight": str(variant.weight) if variant.weight else "0",
-                        "condition": "NEW",
-                        "vat_class": "standard_rate",
-                        "is_active": variant.active,
-                    }
-
-                    if existing_inventory and existing_inventory.get("id"):
-                        # Update existing
-                        inventory_payload["product_id"] = existing_inventory["id"]
-                        response = self._call_stockpilot_api(
-                            config,
-                            "/inventory/update",
-                            inventory_payload,
-                            method="POST",
-                        )
-                        action = "update"
-                    else:
-                        # Create new
-                        response = self._call_stockpilot_api(
-                            config,
-                            "/inventory/create",
-                            inventory_payload,
-                            method="POST",
-                        )
-                        action = "create"
-
-                    if response and response.get("product_id"):
-                        variant.stockpilot_id = response["product_id"]
-                        variant.exported_to_stockpilot = True
-                        _logger.info(
-                            f"Successfully {action}d inventory for {variant_code}"
-                        )
-                    else:
-                        all_success = False
-                        _logger.error(
-                            f"Failed to {action} inventory for {variant_code}"
-                        )
-
-                except Exception as e:
-                    _logger.error(f"Error processing variant {variant_code}: {str(e)}")
-                    all_success = False
-
-            if all_success:
-                product_template.exported_to_stockpilot = True
-                return True
-            return False
+            return self._process_variants(config, product_template, product_id, default_code)
 
         except Exception as e:
             _logger.error(f"Sync failed: {str(e)}", exc_info=True)
             return False
+
+    def _handle_product_header(self, config, product_template):
+        """Handle product header creation/verification"""
+        product_id = product_template.stockpilot_id
+
+        if not product_id:
+            product_header_payload = {
+                "title": product_template.name,
+                "description": product_template.description or "",
+                "brand": 1,
+                "category": 1,
+                "is_active": product_template.active,
+            }
+
+            _logger.info("Creating product header...")
+            header_response = self._call_stockpilot_api(
+                config,
+                "/products/create",
+                product_header_payload,
+                method="POST"
+            )
+
+            if not header_response or not header_response.get('product_id'):
+                _logger.error("Product header creation failed")
+                return False
+
+            product_id = header_response['product_id']
+            if not self._verify_product(config, product_id):
+                return False
+
+            product_template.stockpilot_id = product_id
+            _logger.info(f"Verified product header with ID: {product_id}")
+
+        return product_id
+
+    def _verify_product(self, config, product_id):
+        """Verify product exists in Stockpilot"""
+        try:
+            verify_response = self._call_stockpilot_api(
+                config,
+                "/products/get",
+                method="GET",
+                params={"id": product_id}
+            )
+            if not verify_response:
+                _logger.error(f"Product {product_id} verification failed")
+                return False
+            return True
+        except Exception as e:
+            _logger.error(f"Product verification error: {str(e)}")
+            return False
+
+    def _process_variants(self, config, product_template, product_id, default_code):
+        """Process all variants of a product"""
+        all_success = True
+
+        for variant in product_template.product_variant_ids:
+            variant_result = self._process_single_variant(
+                config, variant, product_id, default_code
+            )
+            if not variant_result:
+                all_success = False
+
+        if all_success:
+            product_template.exported_to_stockpilot = True
+        return all_success
+
+    def _process_single_variant(self, config, variant, product_id, default_code):
+        """Process a single product variant"""
+        variant_code = variant.default_code or default_code
+        barcode = variant.barcode or "N/A"
+
+        try:
+            existing_inventory = self._get_existing_inventory(
+                config, variant, variant_code, barcode
+            )
+
+            inventory_payload = self._prepare_inventory_payload(
+                variant, product_id, variant_code, barcode
+            )
+
+            if existing_inventory and existing_inventory.get('id'):
+                return self._update_inventory(
+                    config, existing_inventory['id'], inventory_payload, variant_code
+                )
+            else:
+                return self._create_inventory(
+                    config, inventory_payload, variant, variant_code
+                )
+
+        except Exception as e:
+            _logger.error(f"Error processing variant {variant_code}: {str(e)}")
+            return False
+
+    def _get_existing_inventory(self, config, variant, variant_code, barcode):
+        """Check for existing inventory in Stockpilot"""
+        if variant.stockpilot_id:
+            try:
+                return self._call_stockpilot_api(
+                    config,
+                    "/inventory/get",
+                    method="GET",
+                    params={"id": variant.stockpilot_id}
+                )
+            except:
+                pass
+
+        try:
+            return self._call_stockpilot_api(
+                config,
+                "/inventory/get",
+                method="GET",
+                params={"sku": variant_code, "barcode": barcode}
+            )
+        except:
+            return None
+
+    def _prepare_inventory_payload(self, variant, product_id, variant_code, barcode):
+        """Prepare inventory payload for API call"""
+        return {
+            "product_id": product_id,
+            "title": variant.name,
+            "description": variant.description or "",
+            "item_name": variant.name,
+            "sku": variant_code,
+            "barcode": barcode,
+            "barcode_type": "EAN",
+            "quantity": int(variant.qty_available),
+            "moq": 1,
+            "stock_threshold": 1,
+            "purchase_price": round(float(variant.standard_price), 2),
+            "wholesale_price": round(float(variant.standard_price), 2),
+            "retail_price": float(variant.list_price),
+            "weight": str(variant.weight) if variant.weight else "0",
+            "condition": "NEW",
+            "vat_class": "standard_rate",
+            "is_active": variant.active,
+        }
+
+    def _update_inventory(self, config, inventory_id, payload, variant_code):
+        """Update existing inventory item"""
+        payload["product_id"] = inventory_id
+        response = self._call_stockpilot_api(
+            config,
+            "/inventory/update",
+            payload,
+            method="POST"
+        )
+        if response and response.get("product_id"):
+            _logger.info(f"Successfully updated inventory for {variant_code}")
+            return True
+        _logger.error(f"Failed to update inventory for {variant_code}")
+        return False
+
+    def _create_inventory(self, config, payload, variant, variant_code):
+        """Create new inventory item"""
+        response = self._call_stockpilot_api(
+            config,
+            "/inventory/create",
+            payload,
+            method="POST"
+        )
+        if response and response.get("product_id"):
+            variant.stockpilot_id = response["product_id"]
+            variant.exported_to_stockpilot = True
+            _logger.info(f"Successfully created inventory for {variant_code}")
+            return True
+        _logger.error(f"Failed to create inventory for {variant_code}")
+        return False
 
     def _find_or_create_product(self, item, company):
         """Find or create product from inventory data"""
@@ -251,7 +288,7 @@ class StockpilotInventory(models.Model):
         self, config, endpoint, data=None, method="POST", params=None
     ):
         """Enhanced API call that handles both POST and GET requests"""
-        base_url = config.base_url.rstrip("" / "")
+        base_url = config.base_url.rstrip("/")
         url = f"{base_url}{endpoint}"
 
         headers = {
@@ -411,14 +448,14 @@ class StockpilotInventory(models.Model):
                     except Exception as e:
                         results["failed"] += 1
                         _logger.error(
-                           f"Error processing variant {variant.id}: {str(e)}",
+                            f"Error processing variant {variant.id}: {str(e)}",
                             exc_info=True
                         )
 
             except Exception as e:
                 results["failed"] += 1
                 _logger.error(
-                   f"Error processing product {product.stockpilot_id}: {str(e)}",
+                    f"Error processing product {product.stockpilot_id}: {str(e)}",
                     exc_info=True
                 )
 
@@ -580,7 +617,7 @@ class StockpilotInventory(models.Model):
                 self._process_inventory_item(product_template, item)
             except Exception as e:
                 _logger.error(
-                   f"Error processing inventory item {item.get('id')}: {str(e)}",
+                    f"Error processing inventory item {item.get('id')}: {str(e)}",
                     exc_info=True,
                 )
                 continue
