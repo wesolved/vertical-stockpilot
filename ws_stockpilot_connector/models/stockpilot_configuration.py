@@ -40,6 +40,11 @@ class StockpilotConfiguration(models.Model):
         "res.company", string="Company", default=lambda self: self.env.company
     )
 
+    active = fields.Boolean(
+        string="Active",
+        default=True,
+    )
+
     _sql_constraints = [
         (
             "company_uniq",
@@ -47,6 +52,34 @@ class StockpilotConfiguration(models.Model):
             "Only one configuration per company allowed!",
         ),
     ]
+
+    def toggle_active(self):
+        """Standard method name that works with Odoo's built-in archive/unarchive"""
+        self.write({"active": not self.active})
+        return True
+
+    def toggle_active_view(self):
+        return {
+            "type": "ir.actions.act_window",
+            "name": "Configurations",
+            "res_model": "stockpilot.configuration",
+            "view_mode": "tree,form",
+            "contex": {
+                "search_default_active": not self.env.context.get(
+                    "search_default_active", True
+                )
+            },
+            "domain": [],
+        }
+
+    def unlink(self):
+        """Prevent deletion of active configurations"""
+        active_configs = self.filtered(lambda c: c.active)
+        if active_configs:
+            raise UserError(
+                _("You cannot delete active configurations! Archive them first.")
+            )
+        return super().unlink()
 
     @api.model
     def _get_default_config(self):
@@ -168,14 +201,43 @@ class StockpilotConfiguration(models.Model):
             _logger.error(f"Failed to import orders: {str(e)}", exc_info=True)
 
     def import_stock(self):
-        """Button action to import stock levels"""
-        config = self._get_default_config()
-        if not config:
-            raise UserError(_("No configuration found for the current company"))
-        self.env["stockpilot.inventory"].with_delay().import_stock_levels(config)
+        """Button action to import products from Stockpilot to Odoo without notifications"""
+        self.ensure_one()
+        try:
+            # Get inventory model
+            inventory_model = self.env["stockpilot.inventory"]
+
+            # Execute the import
+            result = (
+                inventory_model.with_context(stockpilot_config=self)
+                .with_delay()
+                .import_stockpilot_products()
+            )
+
+            if isinstance(result, dict):
+                success_count = result.get("created", 0) + result.get("updated", 0)
+                fail_count = result.get("failed", 0)
+                _logger.info(
+                    "Import: %d products (%d created, %d updated, %d failed)",
+                    success_count + fail_count,
+                    result.get("created", 0),
+                    result.get("updated", 0),
+                    fail_count,
+                )
+            else:
+                _logger.warning(
+                    "Import completed with unexpected results: %s", str(result)
+                )
+                fail_count = 1
+
+            return True
+
+        except Exception as e:
+            _logger.error("Product import failed: %s", str(e), exc_info=True)
+            return False
 
     def export_products(self):
-        """Button action to export products to Stockpilot"""
+        """Button action to export products to Stockpilot without notifications"""
         self.ensure_one()
         try:
             success_count = 0
@@ -189,22 +251,18 @@ class StockpilotConfiguration(models.Model):
             )
 
             if not products:
-                return {
-                    "type": "ir.actions.client",
-                    "tag": "display_notification",
-                    "params": {
-                        "title": _("Warning"),
-                        "message": _("No products with SKU found to export"),
-                        "type": "warning",
-                        "sticky": True,
-                    },
-                }
+                _logger.warning("No products with SKU found to export")
+                return True
 
             _logger.info(f"Starting export of {len(products)} products to Stockpilot")
 
             for product in products:
                 try:
-                    if self.env["stockpilot.inventory"]._trigger_stock_update(product):
+                    if (
+                        self.env["stockpilot.inventory"]
+                        .with_delay()
+                        ._trigger_stock_update(product)
+                    ):
                         success_count += 1
                         _logger.info(
                             f"Successfully exported product {product.default_code}"
@@ -220,29 +278,11 @@ class StockpilotConfiguration(models.Model):
                         f"Error exporting product {product.default_code}: {str(e)}"
                     )
 
-            message = _(
-                "Export completed: %d successful, %d failed. Check logs for details."
-            ) % (success_count, fail_count)
+            _logger.info(
+                f"Export completed: {success_count} successful, {fail_count} failed"
+            )
+            return True
 
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Export Results"),
-                    "message": message,
-                    "type": "success" if fail_count == 0 else "warning",
-                    "sticky": True,
-                },
-            }
         except Exception as e:
             _logger.error(f"Export failed completely: {str(e)}")
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": _("Failed to export products: %s") % str(e),
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
+            return False
