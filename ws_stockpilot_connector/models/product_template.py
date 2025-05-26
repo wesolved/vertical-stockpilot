@@ -18,9 +18,6 @@ class ProductTemplate(models.Model):
     )
 
     def _export_product_template(self, product_tmpl):
-         """
-         Export a product template to Stockpilot via API.
-         """
         config = self.env["stockpilot.configuration"].get_config()
         if not config:
             _logger.error("No Stockpilot configuration found")
