@@ -5,3 +5,6 @@ from . import stockpilot_inventory
 from . import stock_quant
 from . import product_product
 from . import product_template
+from . import stock_picking
+from . import res_partner
+from . import stockpilot_channel

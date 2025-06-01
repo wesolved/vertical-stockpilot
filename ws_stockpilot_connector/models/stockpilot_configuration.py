@@ -19,6 +19,25 @@ class StockpilotConfiguration(models.Model):
         required=True,
     )
 
+    create_missing_taxes = fields.Boolean(
+        string="Create Missing Taxes",
+        default=True,
+        help="Automatically create tax records when they don't exist",
+    )
+
+    default_tax_id = fields.Many2one(
+        "account.tax",
+        string="Default Tax",
+        domain=[("type_tax_use", "=", "sale")],
+        help="Default tax to apply when no other tax information is available",
+    )
+
+    channel_mapping_ids = fields.One2many(
+        "stockpilot.channel.mapping",
+        "config_id",
+        string="Channel Mappings",
+    )
+
     api_client_id = fields.Char(
         string="API Client ID", default="f9e56e88-14e1-4fc0-8089-04aba8e6088b"
     )
