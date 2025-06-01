@@ -2,8 +2,8 @@
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import logging
-from datetime import datetime
 import time
+from datetime import datetime
 
 import requests
 from odoo import _, fields, models
@@ -42,10 +42,7 @@ class StockpilotSync(models.Model):
                     try:
                         _logger.info(f"Fetching page {params['page']} from {base_url}")
                         response = requests.get(
-                            base_url,
-                            headers=headers,
-                            params=params,
-                            timeout=15
+                            base_url, headers=headers, params=params, timeout=15
                         )
                         response.raise_for_status()
                         data = response.json()
@@ -67,7 +64,9 @@ class StockpilotSync(models.Model):
                             time.sleep(retry_delay)
 
                 if not page_success:
-                    _logger.error(f"Failed to fetch page {params['page']} after {max_retries} attempts")
+                    _logger.error(
+                        f"Failed to fetch page {params['page']} after {max_retries} attempts"
+                    )
                     break
 
                 if not current_orders or len(current_orders) < params["page_size"]:
@@ -124,7 +123,9 @@ class StockpilotSync(models.Model):
             )
 
             if existing_order:
-                _logger.info(f"Order {order_data.get('order_number')} already exists, skipping")
+                _logger.info(
+                    f"Order {order_data.get('order_number')} already exists, skipping"
+                )
                 return True
 
             channel_name = order_data.get("sales_channel")
@@ -147,8 +148,7 @@ class StockpilotSync(models.Model):
                 "company_id": company.id,
                 "team_id": team_id.id if team_id else False,
                 "order_line": self._prepare_order_lines(
-                    order_data.get("order_details", {}).get("line_items", []),
-                    company
+                    order_data.get("order_details", {}).get("line_items", []), company
                 ),
                 "note": f"Imported {order_data.get('handle', 'Unknown')}",
             }
@@ -181,7 +181,9 @@ class StockpilotSync(models.Model):
             return fields.Datetime.now()
 
         try:
-            return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S%z").replace(tzinfo=None)
+            return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S%z").replace(
+                tzinfo=None
+            )
         except ValueError:
             try:
                 return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S")
@@ -189,7 +191,9 @@ class StockpilotSync(models.Model):
                 try:
                     return datetime.strptime(date_str, "%Y-%m-%d")
                 except ValueError:
-                    _logger.warning(f"Unparseable date format: {date_str}, using current time")
+                    _logger.warning(
+                        f"Unparseable date format: {date_str}, using current time"
+                    )
                     return fields.Datetime.now()
 
     def _get_odoo_team_for_channel(self, channel_name, company):
@@ -208,11 +212,13 @@ class StockpilotSync(models.Model):
             return mapping.odoo_team_id
 
         if config.create_missing_teams:
-            return self.env["crm.team"].create({
-                "name": f"{channel_name} (Stockpilot)",
-                "company_id": company.id,
-                "team_type": "sales",
-            })
+            return self.env["crm.team"].create(
+                {
+                    "name": f"{channel_name} (Stockpilot)",
+                    "company_id": company.id,
+                    "team_type": "sales",
+                }
+            )
 
         return False
 
@@ -227,8 +233,7 @@ class StockpilotSync(models.Model):
 
         if stockpilot_customer_id:
             existing = self.env["res.partner"].search(
-                domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)],
-                limit=1
+                domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)], limit=1
             )
             if existing:
                 return existing
@@ -243,14 +248,16 @@ class StockpilotSync(models.Model):
                     existing.stockpilot_customer_id = stockpilot_customer_id
                 return existing
 
-        return self.env["res.partner"].create({
-            "name": name,
-            "email": email,
-            "phone": phone,
-            "company_id": company.id,
-            "stockpilot_customer_id": stockpilot_customer_id,
-            "customer_rank": 1,
-        })
+        return self.env["res.partner"].create(
+            {
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "company_id": company.id,
+                "stockpilot_customer_id": stockpilot_customer_id,
+                "customer_rank": 1,
+            }
+        )
 
     def _create_order_from_stockpilot(self, order_data, company):
         """Create new Odoo order from Stockpilot data"""
@@ -373,25 +380,30 @@ class StockpilotSync(models.Model):
         if tax_rate == 0 and tax_amount == 0:
             return None
 
-        existing_tax = self.env["account.tax"].search([
-            ("type_tax_use", "=", "sale"),
-            ("company_id", "=", company.id),
-            ("amount", "=", tax_rate),
-        ], limit=1)
+        existing_tax = self.env["account.tax"].search(
+            [
+                ("type_tax_use", "=", "sale"),
+                ("company_id", "=", company.id),
+                ("amount", "=", tax_rate),
+            ],
+            limit=1,
+        )
 
         if existing_tax:
             return existing_tax
 
         if config and config.create_missing_taxes:
             try:
-                new_tax = self.env['account.tax'].create({
-                    "name": f"{tax_name} ({tax_rate}%)",
-                    "amount": tax_rate,
-                    "amount_type": "percent",
-                    "type_tax_use": "sale",
-                    "company_id": company.id,
-                    "description": f"Imported from Stockpilot for {line.get('sales_channel_title', '')}",
-                })
+                new_tax = self.env["account.tax"].create(
+                    {
+                        "name": f"{tax_name} ({tax_rate}%)",
+                        "amount": tax_rate,
+                        "amount_type": "percent",
+                        "type_tax_use": "sale",
+                        "company_id": company.id,
+                        "description": f"Imported from Stockpilot for {line.get('sales_channel_title', '')}",
+                    }
+                )
                 _logger.info(f"Created new tax: {new_tax.name}")
                 return new_tax
             except Exception as e:

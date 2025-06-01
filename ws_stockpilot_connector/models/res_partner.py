@@ -2,10 +2,10 @@
 from odoo import fields, models
 
 class ResPartner(models.Model):
-    _inherit = 'res.partner'
+    _inherit = "res.partner"
 
     stockpilot_customer_id = fields.Char(
-        string='Stockpilot Customer ID',
+        string="Stockpilot Customer ID",
         copy=False,
         help="Original customer ID from Stockpilot for sync",
     )
