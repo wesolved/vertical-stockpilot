@@ -1,4 +1,5 @@
-from odoo import models, api
+from odoo import models
+
 
 class StockPicking(models.Model):
     _inherit = "stock.picking"
@@ -6,9 +7,7 @@ class StockPicking(models.Model):
     def _action_done(self):
         res = super()._action_done()
         for picking in self:
-            if(
-                picking.picking_type_id.code == "outgoing"
-            ):
+            if picking.picking_type_id.code == "outgoing":
                 for move in picking.move_ids_without_package:
                     if move.product_id.type == "product":
                         self.env[

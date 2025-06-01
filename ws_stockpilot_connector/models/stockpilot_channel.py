@@ -1,5 +1,6 @@
 from odoo import fields, models
 
+
 class StockpilotChannelMapping(models.Model):
     _name = "stockpilot.channel.mapping"
     _description = "Stockpilot Channel Mapping"

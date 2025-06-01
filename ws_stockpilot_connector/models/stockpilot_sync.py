@@ -58,7 +58,7 @@ class StockpilotSync(models.Model):
                     except requests.exceptions.RequestException as e:
                         retry_count += 1
                         _logger.warning(
-                            f"Page {params['page']} failed (attempt {retry_count}/{max_retries}): {str(e)}"
+                            f"Page {params['page']} {retry_count}/{max_retries}: {str(e)}"
                         )
                         if retry_count < max_retries:
                             time.sleep(retry_delay)
@@ -233,15 +233,15 @@ class StockpilotSync(models.Model):
 
         if stockpilot_customer_id:
             existing = self.env["res.partner"].search(
-                domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)], limit=1
+                domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)],
+                limit=1
             )
             if existing:
                 return existing
 
         if email:
             existing = self.env["res.partner"].search(
-                domain + [("email", "=", email)],
-                limit=1
+                domain + [("email", "=", email)], limit=1
             )
             if existing:
                 if stockpilot_customer_id and not existing.stockpilot_customer_id:
@@ -401,7 +401,7 @@ class StockpilotSync(models.Model):
                         "amount_type": "percent",
                         "type_tax_use": "sale",
                         "company_id": company.id,
-                        "description": f"Imported from Stockpilot for {line.get('sales_channel_title', '')}",
+                        "description": f"Imported {line.get('sales_channel_title', '')}",
                     }
                 )
                 _logger.info(f"Created new tax: {new_tax.name}")
