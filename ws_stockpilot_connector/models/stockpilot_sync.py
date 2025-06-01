@@ -234,7 +234,7 @@ class StockpilotSync(models.Model):
         if stockpilot_customer_id:
             existing = self.env["res.partner"].search(
                 domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)],
-                limit=1
+                limit=1,
             )
             if existing:
                 return existing
