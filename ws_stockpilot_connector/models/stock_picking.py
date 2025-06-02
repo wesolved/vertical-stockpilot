@@ -15,9 +15,11 @@ class StockPicking(models.Model):
         res = super()._action_done()
         for picking in self:
             if picking.picking_type_id.code == "outgoing":
-                for move in picking.move_ids_without_package:
-                    if move.product_id.type == "product":
-                        self.env[
-                            "stockpilot.inventory"
-                        ].with_delay()._trigger_stock_update(move.product_id)
+                sale_order = picking.sale_id
+                if sale_order and sale_order.stockpilot_order_id:
+                    for move in picking.move_ids_without_package:
+                        if move.product_id.type == "product":
+                            self.env[
+                                "stockpilot.inventory"
+                            ].with_delay()._trigger_stock_update(move.product_id)
         return res
