@@ -234,7 +234,7 @@ class StockpilotSync(models.Model):
         if stockpilot_customer_id:
             existing = self.env["res.partner"].search(
                 domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)],
-                limit=1,
+                limit=1
             )
             if existing:
                 return existing
@@ -369,15 +369,10 @@ class StockpilotSync(models.Model):
 
     def _get_tax_from_line_data(self, line, config, company):
         """Extract and find/create tax based on line item data"""
-        tax_amount = float(line.get("tax_amount", 0))
         tax_rate = float(line.get("tax_rate", 0))
         tax_name = line.get("tax_name", "Imported Tax")
 
-        if tax_rate == 0 and tax_amount > 0:
-            price = float(line.get("retail_price", 0)) or float(line.get("price", 1))
-            tax_rate = (tax_amount / price) * 100 if price > 0 else 0
-
-        if tax_rate == 0 and tax_amount == 0:
+        if tax_rate == 0:
             return None
 
         existing_tax = self.env["account.tax"].search(
