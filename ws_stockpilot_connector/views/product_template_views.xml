@@ -21,6 +21,7 @@ if records:
     for template in records:
         # Export all variants of each template
         for variant in template.product_variant_ids:
+            variant.write({"exported_to_stockpilot": True})
             env["stockpilot.inventory"].with_delay()._trigger_stock_update(variant)
         </field>
     </record>

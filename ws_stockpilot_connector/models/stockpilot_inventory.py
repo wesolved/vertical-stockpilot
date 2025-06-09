@@ -109,6 +109,7 @@ class StockpilotInventory(models.Model):
             variant_result = self._process_single_variant(
                 config, variant, product_id, default_code
             )
+            product_template.product_variant_ids.write({"exported_to_stockpilot": True})
             if not variant_result:
                 all_success = False
 
