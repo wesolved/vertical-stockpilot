@@ -873,10 +873,14 @@ class StockpilotInventory(models.Model):
                 product.message_post(
                     body=f"Stockpilot sync failed: {error_message}",
                     message_type="comment",
-                    subtype="mail.mt_note"
+                    subtype="mail.mt_note",
                 )
-                _logger.error("Job %s failed for product %s: %s",
-                              job.uuid, product.default_code, error_message)
+                _logger.error(
+                    "Job %s failed for product %s: %s",
+                    job.uuid,
+                    product.default_code,
+                    error_message,
+                )
             else:
                 _logger.error("Job %s failed: %s", job.uuid, error_message)
 

@@ -1,4 +1,5 @@
-from odoo import models, fields
+from odoo import fields, models
+
 
 class StockpilotQueueJob(models.Model):
     _inherit = "queue.job"

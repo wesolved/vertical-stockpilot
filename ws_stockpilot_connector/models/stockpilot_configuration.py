@@ -281,20 +281,15 @@ class StockpilotConfiguration(models.Model):
                         description=f"Stockpilot export: {product.default_code}",
                     )._trigger_stock_update(product)
 
-                    job.db_record().write({
-                        "product_id": product.id,
-                        "config_id": self.id
-                    })
+                    job.db_record().write(
+                        {"product_id": product.id, "config_id": self.id}
+                    )
 
                 except Exception as e:
-                    fail_count += 1
                     _logger.error(
                         f"Error exporting product {product.default_code}: {str(e)}"
                     )
 
-            _logger.info(
-                f"Export completed: {success_count} successful, {fail_count} failed"
-            )
             return True
 
         except Exception as e:
