@@ -277,20 +277,15 @@ class StockpilotConfiguration(models.Model):
 
             for product in products:
                 try:
-                    if (
-                        self.env["stockpilot.inventory"]
-                        .with_delay()
-                        ._trigger_stock_update(product)
-                    ):
-                        success_count += 1
-                        _logger.info(
-                            f"Successfully exported product {product.default_code}"
-                        )
-                    else:
-                        fail_count += 1
-                        _logger.warning(
-                            f"Failed to export product {product.default_code}"
-                        )
+                    job = self.with_delay(
+                        description=f"Stockpilot export: {product.default_code}",
+                    )._trigger_stock_update(product)
+
+                    job.db_record().write({
+                        "product_id": product.id,
+                        "config_id": self.id
+                    })
+
                 except Exception as e:
                     fail_count += 1
                     _logger.error(

@@ -862,3 +862,23 @@ class StockpilotInventory(models.Model):
                 exc_info=True,
             )
             return False
+
+    def _handle_job_failure(self, job, exc_info):
+        """Custom failure handler for Stockpilot jobs"""
+        try:
+            product = job.product_id
+            error_message = str(exc_info[1])
+
+            if product:
+                product.message_post(
+                    body=f"Stockpilot sync failed: {error_message}",
+                    message_type="comment",
+                    subtype="mail.mt_note"
+                )
+                _logger.error("Job %s failed for product %s: %s",
+                              job.uuid, product.default_code, error_message)
+            else:
+                _logger.error("Job %s failed: %s", job.uuid, error_message)
+
+        except Exception as e:
+            _logger.error("Failed to process job failure: %s", str(e))
