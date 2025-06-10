@@ -259,8 +259,6 @@ class StockpilotConfiguration(models.Model):
         """Button action to export products to Stockpilot without notifications"""
         self.ensure_one()
         try:
-            success_count = 0
-            fail_count = 0
             products = self.env["product.product"].search(
                 [
                     ("type", "=", "product"),
