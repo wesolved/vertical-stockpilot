@@ -82,35 +82,23 @@ class StockpilotSync(models.Model):
             return None
 
     def _fetch_stockpilot_orders(self):
-        """Fetch orders from Stockpilot with the actual API structure"""
-
         _logger.info("Starting Stockpilot order import")
 
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
-            _logger.error("No Stockpilot configurations found")
             raise UserError(_("No Stockpilot configurations found"))
 
         for config in configs:
-            _logger.info(f"Processing config for company: {config.company_id.name}")
-
             orders = self._get_stockpilot_orders(config)
             if not orders or not orders.get("results"):
-                _logger.warning("No orders received from Stockpilot API")
-                return
+                continue
 
-            order_list = orders.get("results", [])
-            _logger.info(f"Received {len(order_list)} orders from Stockpilot")
+            for order_data in orders["results"]:
+                self._process_stockpilot_order(order_data, config.company_id)
 
-            for order_data in order_list:
-                self.with_delay()._process_stockpilot_order(
-                    order_data, config.company_id
-                )
-
-        return "Successfully Created Tasks to process orders"
+        return True
 
     def _process_stockpilot_order(self, order_data, company):
-        """Process a single Stockpilot order, skip if already exists"""
         _logger.info(f"Processing order {order_data.get('order_number')}")
 
         try:
@@ -122,24 +110,29 @@ class StockpilotSync(models.Model):
                 limit=1,
             )
 
+            channel_name = order_data.get("sales_channel")
+            team_id = self._get_odoo_team_for_channel(channel_name, company)
+            partner = self._find_or_create_customer(order_data, company)
+            order_date = self._parse_order_date(order_data.get("order_placed_dt"))
+
             if existing_order:
-                _logger.info(
-                    f"Order {order_data.get('order_number')} already exists, skipping"
+                _logger.info(f"Updating order {order_data.get('order_number')}")
+                existing_order.write(
+                    {
+                        "partner_id": partner.id,
+                        "date_order": order_date,
+                        "team_id": team_id.id if team_id else False,
+                        "note": f"Updated {order_data.get('handle', 'Unknown')}",
+                    }
+                )
+                self._update_order_lines(
+                    existing_order,
+                    order_data.get("order_details", {}).get("line_items", []),
+                    company,
                 )
                 return True
 
-            channel_name = order_data.get("sales_channel")
-            team_id = self._get_odoo_team_for_channel(channel_name, company)
-
-            partner = self._find_or_create_customer(order_data, company)
-            if not partner:
-                _logger.error(
-                    f"Failed to find/create customer for order {order_data.get('order_number')}"
-                )
-                return False
-
-            order_date = self._parse_order_date(order_data.get("order_placed_dt"))
-
+            _logger.info(f"Creating new order for {order_data.get('order_number')}")
             order_vals = {
                 "stockpilot_order_id": order_data.get("id"),
                 "name": order_data.get("order_number"),
@@ -153,7 +146,6 @@ class StockpilotSync(models.Model):
                 "note": f"Imported {order_data.get('handle', 'Unknown')}",
             }
 
-            _logger.info(f"Creating new order for {order_data.get('order_number')}")
             order = self.env["sale.order"].create(order_vals)
 
             shipping_total = float(
@@ -164,7 +156,6 @@ class StockpilotSync(models.Model):
 
             if order.state == "draft":
                 order.action_confirm()
-                _logger.info(f"Confirmed order {order.name}")
 
             return True
 
@@ -290,40 +281,43 @@ class StockpilotSync(models.Model):
         order.write(update_vals)
 
     def _prepare_order_lines(self, line_items, company):
-        """Prepare order line values from Stockpilot line items with tax information"""
+        """Prepare order line values from Stockpilot
+        with tax and discount, avoiding duplicates."""
+
         order_lines = []
         config = self.env["stockpilot.configuration"].get_config(company.id)
 
+        seen_lines = set()  # (name, qty)
+
         for line in line_items:
             try:
-                if not line.get("sales_channel_title"):
-                    _logger.warning("Line missing product title, skipping")
+                raw_title = (line.get("sales_channel_title") or "").strip()
+                if not raw_title:
                     continue
 
+                quantity = float(line.get("quantity", 1))
+                retail_price = float(line.get("retail_price", 0)) or float(
+                    line.get("total_price", 0)
+                )
+                discount_abs = float(line.get("discount", 0)) or 0.0
+                discount_pct = (
+                    round((discount_abs / retail_price) * 100, 2)
+                    if retail_price
+                    else 0.0
+                )
+
+                line_key = (raw_title, quantity)
+                if line_key in seen_lines:
+                    _logger.warning(f"Duplicate line detected and skipped: {line_key}")
+                    continue
+                seen_lines.add(line_key)
+
                 product = self.env["product.product"].search(
-                    [
-                        (
-                            "name",
-                            "=ilike",
-                            line["sales_channel_title"].split("-")[0].strip(),
-                        )
-                    ],
-                    limit=1,
+                    [("name", "=ilike", raw_title)], limit=1
                 )
 
                 if not product:
-                    _logger.warning(
-                        f"Product not found for: {line['sales_channel_title']}"
-                    )
-                    product = self._create_placeholder_product(
-                        line["sales_channel_title"]
-                    )
-
-                price = float(line.get("retail_price", 0)) or float(
-                    line.get("total_price", 0)
-                )
-                if price <= 0:
-                    price = product.list_price
+                    product = self._create_placeholder_product(raw_title)
 
                 taxes = self._get_taxes_for_line(line, config, company, product)
 
@@ -333,19 +327,18 @@ class StockpilotSync(models.Model):
                         0,
                         {
                             "product_id": product.id,
-                            "product_uom_qty": float(line.get("quantity", 1)),
-                            "price_unit": price,
-                            "name": line["sales_channel_title"],
+                            "product_uom_qty": quantity,
+                            "price_unit": retail_price,
+                            "discount": discount_pct,
+                            "name": raw_title,
                             "tax_id": [(6, 0, taxes.ids)],
                         },
                     )
                 )
 
             except Exception as e:
-                _logger.error(f"Failed to process line: {str(e)}")
-                continue
+                _logger.error(f"Error preparing line: {str(e)}")
 
-        _logger.info(f"Prepared {len(order_lines)} order lines with taxes")
         return order_lines
 
     def _get_taxes_for_line(self, line, config, company, product):
@@ -368,18 +361,22 @@ class StockpilotSync(models.Model):
         return self.env["account.tax"]
 
     def _get_tax_from_line_data(self, line, config, company):
-        """Extract and find/create tax based on line item data"""
+        """Always prefer tax from Stockpilot's line['tax_rate']"""
+
         tax_rate = float(line.get("tax_rate", 0))
         tax_name = line.get("tax_name", "Imported Tax")
 
-        if tax_rate == 0:
-            return None
+        if tax_rate <= 0:
+            return self.env["account.tax"]
 
+        # Match on amount within 0.01 precision
         existing_tax = self.env["account.tax"].search(
             [
                 ("type_tax_use", "=", "sale"),
                 ("company_id", "=", company.id),
-                ("amount", "=", tax_rate),
+                ("amount_type", "=", "percent"),
+                ("amount", ">=", tax_rate - 0.01),
+                ("amount", "<=", tax_rate + 0.01),
             ],
             limit=1,
         )
@@ -388,23 +385,17 @@ class StockpilotSync(models.Model):
             return existing_tax
 
         if config and config.create_missing_taxes:
-            try:
-                new_tax = self.env["account.tax"].create(
-                    {
-                        "name": f"{tax_name} ({tax_rate}%)",
-                        "amount": tax_rate,
-                        "amount_type": "percent",
-                        "type_tax_use": "sale",
-                        "company_id": company.id,
-                        "description": f"Imported {line.get('sales_channel_title', '')}",
-                    }
-                )
-                _logger.info(f"Created new tax: {new_tax.name}")
-                return new_tax
-            except Exception as e:
-                _logger.error(f"Failed to create tax: {str(e)}")
+            return self.env["account.tax"].create(
+                {
+                    "name": f"{tax_name or 'Stockpilot Tax'} ({tax_rate}%)",
+                    "amount": tax_rate,
+                    "amount_type": "percent",
+                    "type_tax_use": "sale",
+                    "company_id": company.id,
+                }
+            )
 
-        return None
+        return self.env["account.tax"]
 
     def _create_placeholder_product(self, product_name):
         """Create a placeholder product when the real one isn't found"""
@@ -421,9 +412,6 @@ class StockpilotSync(models.Model):
         except Exception as e:
             _logger.error(f"Failed to create placeholder product: {str(e)}")
             raise
-
-    def _update_order_lines(self, order, lines_data):
-        """Update existing order lines from Stockpilot data"""
 
     def _add_shipping_line(self, order, shipping_total):
         """Add shipping line to the order"""
@@ -461,3 +449,65 @@ class StockpilotSync(models.Model):
             )
         except Exception as e:
             _logger.error(f"Failed to add shipping line: {str(e)}")
+
+    def _update_order_lines(self, order, line_items, company):
+        """Update or create order lines from Stockpilot, skipping duplicates."""
+
+        config = self.env["stockpilot.configuration"].get_config(company.id)
+
+        existing_lines = {
+            (line.name.strip(), line.product_uom_qty): line for line in order.order_line
+        }
+
+        seen_lines = set()
+
+        for line in line_items:
+            name = (line.get("sales_channel_title") or "").strip()
+            if not name:
+                continue
+
+            quantity = float(line.get("quantity", 1))
+            retail_price = float(line.get("retail_price", 0)) or float(
+                line.get("total_price", 0)
+            )
+            discount_abs = float(line.get("discount", 0)) or 0.0
+            discount_pct = (
+                round((discount_abs / retail_price) * 100, 2) if retail_price else 0.0
+            )
+
+            line_key = (name, quantity)
+            if line_key in seen_lines:
+                _logger.warning(f"Duplicate update line skipped: {line_key}")
+                continue
+            seen_lines.add(line_key)
+
+            product = self.env["product.product"].search(
+                [("name", "=ilike", name)], limit=1
+            )
+
+            if not product:
+                product = self._create_placeholder_product(name)
+
+            taxes = self._get_taxes_for_line(line, config, company, product)
+
+            if line_key in existing_lines:
+                existing_lines[line_key].write(
+                    {
+                        "price_unit": retail_price,
+                        "discount": discount_pct,
+                        "tax_id": [(6, 0, taxes.ids)],
+                        "name": name,
+                    }
+                )
+            else:
+                self.env["sale.order.line"].create(
+                    {
+                        "order_id": order.id,
+                        "product_id": product.id,
+                        "product_uom_qty": quantity,
+                        "price_unit": retail_price,
+                        "discount": discount_pct,
+                        "tax_id": [(6, 0, taxes.ids)],
+                        "name": name,
+                    }
+                )
