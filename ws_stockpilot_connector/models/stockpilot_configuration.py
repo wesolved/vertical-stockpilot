@@ -1,6 +1,7 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
+# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
+
 import logging
 
 import requests
@@ -143,7 +144,7 @@ class StockpilotConfiguration(models.Model):
         """Connecting to Stockpilot API"""
         try:
             response = requests.get(
-                f"{self.base_url.rstrip('/')}/inventory",
+                "%s/inventory" % self.base_url.rstrip("/"),
                 headers={
                     "X-CLIENT-ID": self.api_client_id,
                     "X-CLIENT-SECRET": self.api_client_secret,
@@ -217,7 +218,7 @@ class StockpilotConfiguration(models.Model):
 
             _logger.info("Orders imported successfully")
         except Exception as e:
-            _logger.error(f"Failed to import orders: {str(e)}", exc_info=True)
+            _logger.error(_("Failed to import orders: %s") % str(e), exc_info=True)
 
     def import_stock(self):
         """Button action to import products from Stockpilot to Odoo without notifications"""
@@ -256,52 +257,52 @@ class StockpilotConfiguration(models.Model):
             return False
 
     def export_products(self):
-        """Button action to export products to Stockpilot without notifications"""
+        """Button action to create batch export job for products to Stockpilot"""
         self.ensure_one()
         try:
-            success_count = 0
-            fail_count = 0
-            products = self.env["product.product"].search(
-                [
-                    ("type", "=", "product"),
-                    ("default_code", "!=", False),
-                    ("active", "=", True),
-                ]
+            # Create a new batch export
+            export_time = fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            batch_export_name = _("Batch Export - %s") % export_time
+            batch_export = self.env["stockpilot.batch.export"].create(
+                {
+                    "name": batch_export_name,
+                    "config_id": self.id,
+                }
             )
 
-            if not products:
-                _logger.warning("No products with SKU found to export")
-                return True
+            message = _("Created batch export job: %s") % batch_export.name
+            _logger.info(message)
 
-            _logger.info(f"Starting export of {len(products)} products to Stockpilot")
+            # Start the batch export
+            batch_export.action_start_export()
 
-            for product in products:
-                try:
-                    if (
-                        self.env["stockpilot.inventory"]
-                        .with_delay()
-                        ._trigger_stock_update(product)
-                    ):
-                        success_count += 1
-                        _logger.info(
-                            f"Successfully exported product {product.default_code}"
-                        )
-                    else:
-                        fail_count += 1
-                        _logger.warning(
-                            f"Failed to export product {product.default_code}"
-                        )
-                except Exception as e:
-                    fail_count += 1
-                    _logger.error(
-                        f"Error exporting product {product.default_code}: {str(e)}"
-                    )
-
-            _logger.info(
-                f"Export completed: {success_count} successful, {fail_count} failed"
-            )
-            return True
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Batch Export Started"),
+                    "message": _(
+                        "Batch export job created successfully. "
+                        "Check the batch exports menu for progress."
+                    ),
+                    "type": "success",
+                    "sticky": False,
+                },
+            }
 
         except Exception as e:
-            _logger.error(f"Export failed completely: {str(e)}")
-            return False
+            error_message = _("Failed to create batch export: %s") % str(e)
+            _logger.error(
+                error_message,
+                exc_info=True,
+            )
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Error"),
+                    "message": error_message,
+                    "type": "danger",
+                    "sticky": True,
+                },
+            }

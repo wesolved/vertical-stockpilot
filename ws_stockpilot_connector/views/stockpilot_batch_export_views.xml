@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <data>
+        <!-- Batch Export Tree View -->
+        <record id="view_stockpilot_batch_export_tree" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.tree</field>
+            <field name="model">stockpilot.batch.export</field>
+            <field name="arch" type="xml">
+                <tree
+          string="Batch Exports"
+          decoration-info="state == 'draft'"
+          decoration-warning="state == 'running'"
+          decoration-success="state == 'completed'"
+          decoration-danger="state == 'failed'"
+        >
+                    <field name="name" />
+                    <field name="config_id" />
+                    <field name="company_id" />
+                    <field name="state" />
+                    <field name="total_products" />
+                    <field name="successful_exports" />
+                    <field name="failed_exports" />
+                    <field name="skipped_exports" />
+                    <field name="start_date" />
+                    <field name="end_date" />
+                    <field name="create_date" />
+                </tree>
+            </field>
+        </record>
+
+        <!-- Batch Export Form View -->
+        <record id="view_stockpilot_batch_export_form" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.form</field>
+            <field name="model">stockpilot.batch.export</field>
+            <field name="arch" type="xml">
+                <form string="Batch Export">
+                    <header>
+                        <button
+              name="action_start_export"
+              string="Start Export"
+              type="object"
+              class="oe_highlight"
+              attrs="{'invisible': [('state', '!=', 'draft')]}"
+            />
+                        <button
+              name="action_view_logs"
+              string="View Logs"
+              type="object"
+              class="btn-secondary"
+              attrs="{'invisible': [('state', '=', 'draft')]}"
+            />
+                        <button
+              name="action_retry_failed"
+              string="Retry Failed"
+              type="object"
+              class="btn-warning"
+              attrs="{'invisible': [('state', 'not in', ['completed', 'failed'])]}"
+            />
+                        <field name="state" widget="statusbar" statusbar_visible="draft,running,completed" />
+                    </header>
+                    <sheet>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="name" placeholder="Batch Export Name" />
+                            </h1>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="config_id" />
+                                <field name="company_id" />
+                                <field name="start_date" />
+                                <field name="end_date" />
+                            </group>
+                            <group>
+                                <field name="total_products" />
+                                <field name="successful_exports" />
+                                <field name="failed_exports" />
+                                <field name="skipped_exports" />
+                                <field name="create_date" />
+                            </group>
+                        </group>
+                        <notebook>
+                            <page string="Export Logs" name="logs">
+                                <field name="log_ids" readonly="1">
+                                    <tree>
+                                        <field name="timestamp" />
+                                        <field
+                      name="level"
+                      widget="badge"
+                      decoration-info="level == 'info'"
+                      decoration-success="level == 'success'"
+                      decoration-warning="level == 'warning'"
+                      decoration-danger="level == 'error'"
+                    />
+                                        <field name="message" />
+                                        <field name="product_sku" />
+                                    </tree>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- Batch Export Kanban View -->
+        <record id="view_stockpilot_batch_export_kanban" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.kanban</field>
+            <field name="model">stockpilot.batch.export</field>
+            <field name="arch" type="xml">
+                <kanban default_group_by="state" class="o_kanban_small_column">
+                    <field name="name" />
+                    <field name="state" />
+                    <field name="total_products" />
+                    <field name="successful_exports" />
+                    <field name="failed_exports" />
+                    <field name="skipped_exports" />
+                    <field name="start_date" />
+                    <field name="end_date" />
+                    <templates>
+                        <t t-name="kanban-box">
+                            <div class="oe_kanban_global_click">
+                                <div class="oe_kanban_content">
+                                    <div class="o_kanban_record_top">
+                                        <div class="o_kanban_record_headings">
+                                            <strong class="o_kanban_record_title">
+                                                <field name="name" />
+                                            </strong>
+                                        </div>
+                                        <div class="o_kanban_record_bottom">
+                                            <div class="oe_kanban_bottom_left">
+                                                <field
+                          name="state"
+                          widget="label_selection"
+                          options="{'classes': {'draft': 'info', 'running': 'warning', 'completed': 'success', 'failed': 'danger'}}"
+                        />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="o_kanban_record_body">
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <small>Total: <field name="total_products" /></small>
+                                            </div>
+                                            <div class="col-6">
+                                                <small>Success: <field name="successful_exports" /></small>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <small>Failed: <field name="failed_exports" /></small>
+                                            </div>
+                                            <div class="col-6">
+                                                <small>Skipped: <field name="skipped_exports" /></small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+                    </templates>
+                </kanban>
+            </field>
+        </record>
+
+        <!-- Batch Export Search View -->
+        <record id="view_stockpilot_batch_export_search" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.search</field>
+            <field name="model">stockpilot.batch.export</field>
+            <field name="arch" type="xml">
+                <search string="Search Batch Exports">
+                    <field name="name" />
+                    <field name="config_id" />
+                    <field name="company_id" />
+                    <filter string="Draft" name="draft" domain="[('state', '=', 'draft')]" />
+                    <filter string="Running" name="running" domain="[('state', '=', 'running')]" />
+                    <filter string="Completed" name="completed" domain="[('state', '=', 'completed')]" />
+                    <filter string="Failed" name="failed" domain="[('state', '=', 'failed')]" />
+                    <group expand="0" string="Group By">
+                        <filter string="Status" name="group_state" context="{'group_by': 'state'}" />
+                        <filter string="Company" name="group_company" context="{'group_by': 'company_id'}" />
+                        <filter string="Configuration" name="group_config" context="{'group_by': 'config_id'}" />
+                        <filter string="Date" name="group_date" context="{'group_by': 'create_date:day'}" />
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <!-- Batch Export Action -->
+        <record id="action_stockpilot_batch_export" model="ir.actions.act_window">
+            <field name="name">Batch Exports</field>
+            <field name="res_model">stockpilot.batch.export</field>
+            <field name="view_mode">kanban,tree,form</field>
+            <field name="context">{}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Create your first batch export!
+                </p>
+                <p>
+                    Batch exports allow you to export multiple products to StockPilot in a single job,
+                    with detailed logging and error handling.
+                </p>
+            </field>
+        </record>
+
+        <!-- Batch Export Log Tree View -->
+        <record id="view_stockpilot_batch_export_log_tree" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.log.tree</field>
+            <field name="model">stockpilot.batch.export.log</field>
+            <field name="arch" type="xml">
+                <tree
+          string="Export Logs"
+          decoration-info="level == 'info'"
+          decoration-success="level == 'success'"
+          decoration-warning="level == 'warning'"
+          decoration-danger="level == 'error'"
+        >
+                    <field name="timestamp" />
+                    <field name="level" widget="badge" />
+                    <field name="message" />
+                    <field name="product_sku" />
+                    <field name="batch_export_id" />
+                </tree>
+            </field>
+        </record>
+
+        <!-- Batch Export Log Form View -->
+        <record id="view_stockpilot_batch_export_log_form" model="ir.ui.view">
+            <field name="name">stockpilot.batch.export.log.form</field>
+            <field name="model">stockpilot.batch.export.log</field>
+            <field name="arch" type="xml">
+                <form string="Export Log">
+                    <sheet>
+                        <group>
+                            <field name="batch_export_id" />
+                            <field name="level" />
+                            <field name="timestamp" />
+                            <field name="product_sku" />
+                        </group>
+                        <group>
+                            <field name="message" nolabel="1" />
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- Batch Export Log Action -->
+        <record id="action_stockpilot_batch_export_log" model="ir.actions.act_window">
+            <field name="name">Export Logs</field>
+            <field name="res_model">stockpilot.batch.export.log</field>
+            <field name="view_mode">tree,form</field>
+            <field name="context">{}</field>
+        </record>
+
+        <!-- Menu Items -->
+        <menuitem
+      id="menu_stockpilot_batch_export"
+      name="Batch Exports"
+      parent="menu_stockpilot_main"
+      action="action_stockpilot_batch_export"
+      sequence="10"
+    />
+
+        <menuitem
+      id="menu_stockpilot_batch_export_log"
+      name="Export Logs"
+      parent="menu_stockpilot_main"
+      action="action_stockpilot_batch_export_log"
+      sequence="20"
+    />
+    </data>
+</odoo>

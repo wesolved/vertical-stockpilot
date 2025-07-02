@@ -8,3 +8,4 @@ from . import product_template
 from . import stock_picking
 from . import res_partner
 from . import stockpilot_channel
+from . import stockpilot_batch_export
