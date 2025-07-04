@@ -65,11 +65,11 @@
         </record>
 
         <menuitem
-            id="menu_stockpilot_main"
-            name="Stockpilot"
-            sequence="100"
-            action="action_stockpilot_configuration"
-            web_icon="ws_stockpilot_connector,static/description/icon.png"
-            />
+      id="menu_stockpilot_main"
+      name="Stockpilot"
+      sequence="100"
+      action="action_stockpilot_configuration"
+      web_icon="ws_stockpilot_connector,static/description/icon.png"
+    />
     </data>
 </odoo>
