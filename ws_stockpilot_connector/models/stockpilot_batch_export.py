@@ -123,8 +123,8 @@ class StockpilotBatchExport(models.Model):
                 _("Product %s export error: %s") % (product.default_code, error_msg),
                 exc_info=True,
             )
-
-        return True
+            # Re-raise the exception so the job fails properly in OCA batch
+            raise
 
     def _has_duplicate_ean(self, product):
         """Check if product has duplicate EAN with other products"""
