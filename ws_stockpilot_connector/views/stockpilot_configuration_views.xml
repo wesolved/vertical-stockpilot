@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8" ?>
 <odoo>
     <data>
         <record id="view_stockpilot_configuration_tree" model="ir.ui.view">
@@ -60,17 +59,17 @@
         </record>
 
         <record id="action_stockpilot_configuration" model="ir.actions.act_window">
-        <field name="name">Stockpilot Configs</field>
-        <field name="res_model">stockpilot.configuration</field>
-        <field name="view_mode">tree,form</field>
-    </record>
+            <field name="name">Stockpilot Configs</field>
+            <field name="res_model">stockpilot.configuration</field>
+            <field name="view_mode">tree,form</field>
+        </record>
 
         <menuitem
-      id="menu_stockpilot_main"
-      name="Stockpilot"
-      sequence="100"
-      action="action_stockpilot_configuration"
-      web_icon="ws_stockpilot_connector,static/description/icon.png"
-    />
+            id="menu_stockpilot_main"
+            name="Stockpilot"
+            sequence="100"
+            action="action_stockpilot_configuration"
+            web_icon="ws_stockpilot_connector,static/description/icon.png"
+            />
     </data>
 </odoo>

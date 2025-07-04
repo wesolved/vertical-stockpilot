@@ -121,11 +121,11 @@
 
         <!-- Menu Items -->
         <menuitem
-      id="menu_stockpilot_batch_export"
-      name="Batch Exports"
-      parent="menu_stockpilot_main"
-      action="action_stockpilot_batch_export"
-      sequence="10"
-    />
+            id="menu_stockpilot_batch_export"
+            name="Batch Exports"
+            parent="menu_stockpilot_main"
+            action="action_stockpilot_batch_export"
+            sequence="10"
+            />
     </data>
 </odoo>
