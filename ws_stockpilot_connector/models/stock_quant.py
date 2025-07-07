@@ -10,7 +10,9 @@ class StockQuant(models.Model):
         """
         res = super().write(vals)
         if "quantity" in vals:
-            self.env["stockpilot.inventory"].with_delay(eta=30)._trigger_stock_update(
-                self.product_id
-            )
+            config = self.env["stockpilot.configuration"].get_config()
+            if config:
+                self.env["stockpilot.inventory"].with_context(
+                    stockpilot_config=config
+                ).with_delay(eta=30)._trigger_stock_update(self.product_id)
         return res

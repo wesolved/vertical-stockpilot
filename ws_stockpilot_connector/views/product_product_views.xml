@@ -6,9 +6,12 @@
                 <field name="type" position="after">
                     <field name="exported_to_stockpilot" />
                     <field name="stockpilot_id" />
+                    <field name="stockpilot_config_id" />
                 </field>
             </field>
         </record>
+
+
 
     <record id="action_export_to_stockpilot" model="ir.actions.server">
             <field name="name">Export to stockpilot</field>
@@ -18,8 +21,12 @@
             <field name="state">code</field>
             <field name="code">
             if records:
-                for rec in records:
-                    env["stockpilot.inventory"].with_delay()._trigger_stock_update(rec)
+                config = env["stockpilot.configuration"].get_config()
+                if config:
+                    for rec in records:
+                        env["stockpilot.inventory"].with_context(stockpilot_config=config).with_delay()._trigger_stock_update(rec)
+                else:
+                    raise UserError("No Stockpilot configuration found")
             </field>
         </record>
 </odoo>

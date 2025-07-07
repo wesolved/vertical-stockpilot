@@ -33,7 +33,10 @@ class StockpilotInventory(models.Model):
         if not self._should_sync_product(product_template):
             return True
 
-        config = self.env["stockpilot.configuration"].get_config()
+        # Get config from context if available (for batch exports), otherwise get default
+        config = self.env.context.get("stockpilot_config")
+        if not config:
+            config = self.env["stockpilot.configuration"].get_config()
         if not config:
             _logger.error("No Stockpilot configuration found")
             return False
@@ -82,7 +85,12 @@ class StockpilotInventory(models.Model):
             if not self._verify_product(config, product_id):
                 return False
 
-            product_template.stockpilot_id = product_id
+            product_template.write(
+                {
+                    "stockpilot_id": product_id,
+                    "stockpilot_config_id": config.id,
+                }
+            )
             _logger.info(f"Verified product header with ID: {product_id}")
 
         return product_id
@@ -207,8 +215,13 @@ class StockpilotInventory(models.Model):
             config, "/inventory/create", payload, method="POST"
         )
         if response and response.get("product_id"):
-            variant.stockpilot_id = response["product_id"]
-            variant.exported_to_stockpilot = True
+            variant.write(
+                {
+                    "stockpilot_id": response["product_id"],
+                    "stockpilot_config_id": config.id,
+                    "exported_to_stockpilot": True,
+                }
+            )
             _logger.info(f"Successfully created inventory for {variant_code}")
             return True
         _logger.error(f"Failed to create inventory for {variant_code}")
@@ -554,7 +567,9 @@ class StockpilotInventory(models.Model):
 
         for product in products:
             try:
-                self._trigger_stock_update(product)
+                self.with_context(stockpilot_config=config)._trigger_stock_update(
+                    product
+                )
             except Exception as e:
                 _logger.error(f"Failed to sync product {product.id}: {str(e)}")
                 continue

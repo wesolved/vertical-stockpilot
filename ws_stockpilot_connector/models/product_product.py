@@ -14,11 +14,22 @@ class ProductProduct(models.Model):
         help="Indicates whether the product has been exported to Stockpilot.",
     )
 
+    stockpilot_config_id = fields.Many2one(
+        "stockpilot.configuration",
+        string="Stockpilot Configuration",
+        help="Configuration used to export this product to Stockpilot",
+        copy=False,
+    )
+
     def write(self, vals):
         """
         Update record and trigger Stockpilot sync on stock/code change.
         """
         res = super().write(vals)
         if any(field in vals for field in ["qty_available", "default_code"]):
-            self.env["stockpilot.inventory"]._trigger_stock_update(self)
+            config = self.env["stockpilot.configuration"].get_config()
+            if config:
+                self.env["stockpilot.inventory"].with_context(
+                    stockpilot_config=config
+                )._trigger_stock_update(self)
         return res

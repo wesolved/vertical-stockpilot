@@ -107,8 +107,10 @@ class StockpilotBatchExport(models.Model):
                 )
                 return True
 
-            # Attempt to export the product
-            result = inventory_model._trigger_stock_update(product)
+            # Attempt to export the product with config context
+            result = inventory_model.with_context(
+                stockpilot_config=self.config_id
+            )._trigger_stock_update(product)
 
             if result:
                 _logger.info(

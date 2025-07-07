@@ -14,7 +14,9 @@ class StockMove(models.Model):
         """
         res = super()._action_done()
         if self.state == "done":
-            self.env["stockpilot.inventory"].with_delay(eta=60)._trigger_stock_update(
-                self.product_id
-            )
+            config = self.env["stockpilot.configuration"].get_config()
+            if config:
+                self.env["stockpilot.inventory"].with_context(
+                    stockpilot_config=config
+                ).with_delay(eta=60)._trigger_stock_update(self.product_id)
         return res

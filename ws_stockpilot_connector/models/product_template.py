@@ -16,6 +16,12 @@ class ProductTemplate(models.Model):
     exported_to_stockpilot = fields.Boolean(
         string="Exported to Stockpilot", default=False
     )
+    stockpilot_config_id = fields.Many2one(
+        "stockpilot.configuration",
+        string="Stockpilot Configuration",
+        help="Configuration used to export this product to Stockpilot",
+        copy=False,
+    )
 
     def _export_product_template(self, product_tmpl):
         config = self.env["stockpilot.configuration"].get_config()
@@ -38,7 +44,12 @@ class ProductTemplate(models.Model):
         response = self._call_stockpilot_api(config, "product/create", payload)
 
         if response and response.get("product_id"):
-            product_tmpl.stockpilot_id = response["product_id"]
+            product_tmpl.write(
+                {
+                    "stockpilot_id": response["product_id"],
+                    "stockpilot_config_id": config.id,
+                }
+            )
             return response["product_id"]
         else:
             _logger.error(f"Failed to export product template {product_tmpl.id}")
