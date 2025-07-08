@@ -82,6 +82,7 @@ class StockpilotSync(models.Model):
             return None
 
     def _fetch_stockpilot_orders(self):
+        """Fetch create/update stockpilot orders"""
         _logger.info("Starting Stockpilot order import")
 
         configs = self.env["stockpilot.configuration"].search([])
