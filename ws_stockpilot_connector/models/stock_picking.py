@@ -1,5 +1,6 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
+# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import models
@@ -19,7 +20,9 @@ class StockPicking(models.Model):
                 if sale_order and sale_order.stockpilot_order_id:
                     for move in picking.move_ids_without_package:
                         if move.product_id.type == "product":
-                            self.env[
-                                "stockpilot.inventory"
-                            ].with_delay()._trigger_stock_update(move.product_id)
+                            config = self.env["stockpilot.configuration"].get_config()
+                            if config:
+                                self.env["stockpilot.inventory"].with_context(
+                                    stockpilot_config=config
+                                ).with_delay()._trigger_stock_update(move.product_id)
         return res

@@ -94,13 +94,64 @@ class StockpilotConfiguration(models.Model):
         }
 
     def unlink(self):
-        """Prevent deletion of active configurations"""
+        """Prevent deletion of active configurations and clear product IDs"""
         active_configs = self.filtered(lambda c: c.active)
         if active_configs:
             raise UserError(
                 _("You cannot delete active configurations! Archive them first.")
             )
+
+        # Clear stockpilot_id and config_id from all products exported with this configuration
+        self._clear_product_stockpilot_ids()
+
         return super().unlink()
+
+    def write(self, vals):
+        """Override write to clear product IDs when archiving"""
+        result = super().write(vals)
+
+        # If configuration is being archived (active set to False), clear product IDs
+        if "active" in vals and not vals["active"]:
+            self._clear_product_stockpilot_ids()
+
+        return result
+
+    def _clear_product_stockpilot_ids(self):
+        """Clear stockpilot_id and config_id from products exported with this configuration"""
+        for config in self:
+            # Clear from product templates
+            product_templates = self.env["product.template"].search(
+                [("stockpilot_config_id", "=", config.id)]
+            )
+            if product_templates:
+                product_templates.write(
+                    {
+                        "stockpilot_id": False,
+                        "stockpilot_config_id": False,
+                        "exported_to_stockpilot": False,
+                    }
+                )
+                _logger.info(
+                    f"Cleared stockpilot IDs from {len(product_templates)} "
+                    f"product templates for config {config.id}"
+                )
+
+            # Clear from product variants
+            product_variants = self.env["product.product"].search(
+                [("stockpilot_config_id", "=", config.id)]
+            )
+            if product_variants:
+                product_variants.write(
+                    {
+                        "stockpilot_id": False,
+                        "stockpilot_config_id": False,
+                        "exported_to_stockpilot": False,
+                    }
+                )
+                _logger.info(
+                    f"Cleared stockpilot IDs from {len(product_variants)} "
+                    f"product variants for config {config.id}"
+                )
 
     @api.model
     def _get_default_config(self):

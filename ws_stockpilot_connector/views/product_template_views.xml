@@ -6,7 +6,22 @@
             <field name="type" position="after">
                 <field name="exported_to_stockpilot" />
                 <field name="stockpilot_id" />
+                <field name="stockpilot_config_id" />
             </field>
+        </field>
+    </record>
+
+    <record id="product_template_form_view" model="ir.ui.view">
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view" />
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <group name="stockpilot_info" string="Stockpilot Information">
+                    <field name="exported_to_stockpilot" />
+                    <field name="stockpilot_id" />
+                    <field name="stockpilot_config_id" />
+                </group>
+            </xpath>
         </field>
     </record>
 
@@ -18,11 +33,15 @@
         <field name="state">code</field>
         <field name="code">
 if records:
-    for template in records:
-        # Export all variants of each template
-        for variant in template.product_variant_ids:
-            variant.write({"exported_to_stockpilot": True})
-            env["stockpilot.inventory"].with_delay()._trigger_stock_update(variant)
+    config = env["stockpilot.configuration"].get_config()
+    if config:
+        for template in records:
+            # Export all variants of each template
+            for variant in template.product_variant_ids:
+                variant.write({"exported_to_stockpilot": True})
+                env["stockpilot.inventory"].with_context(stockpilot_config=config).with_delay()._trigger_stock_update(variant)
+    else:
+        raise UserError("No Stockpilot configuration found")
         </field>
     </record>
 </odoo>
