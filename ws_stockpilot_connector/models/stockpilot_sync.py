@@ -119,9 +119,11 @@ class StockpilotSync(models.Model):
                 _logger.info(f"Updating order {order_data.get('order_number')}")
                 existing_order.write(
                     {
-                        "partner_id": partners["company"].id,  # Set to company
-                        "partner_invoice_id": partners["invoice"].id,
-                        "partner_shipping_id": partners["delivery"].id,
+                        "partner_id": partners[
+                            "company_address"
+                        ].id,  # Set to company address
+                        "partner_invoice_id": partners["invoice_address"].id,
+                        "partner_shipping_id": partners["delivery_address"].id,
                         "date_order": order_date,
                         "team_id": team_id.id if team_id else False,
                         "note": f"Updated {order_data.get('handle', 'Unknown')}",
@@ -137,9 +139,9 @@ class StockpilotSync(models.Model):
             order_vals = {
                 "stockpilot_order_id": order_data.get("id"),
                 "name": order_data.get("order_number"),
-                "partner_id": partners["company"].id,  # Set to company
-                "partner_invoice_id": partners["invoice"].id,
-                "partner_shipping_id": partners["delivery"].id,
+                "partner_id": partners["company_address"].id,  # Set to company address
+                "partner_invoice_id": partners["invoice_address"].id,
+                "partner_shipping_id": partners["delivery_address"].id,
                 "date_order": order_date,
                 "company_id": company.id,
                 "team_id": team_id.id if team_id else False,
@@ -408,9 +410,9 @@ class StockpilotSync(models.Model):
                 {k: v for k, v in main_contact_vals.items() if v}
             )
         return {
-            "company": company_partner,
-            "invoice": invoice_partner,
-            "delivery": delivery_partner,
+            "company_address": company_partner,
+            "invoice_address": invoice_partner,
+            "delivery_address": delivery_partner,
             "main_contact": main_contact_partner,
         }
 
