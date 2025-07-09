@@ -82,6 +82,7 @@ class StockpilotSync(models.Model):
 
     def _fetch_stockpilot_orders(self):
         """Fetch and process all Stockpilot orders for all configurations."""
+
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
             _logger.info("No Stockpilot configurations found - skipping order import")
