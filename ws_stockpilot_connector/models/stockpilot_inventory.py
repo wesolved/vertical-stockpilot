@@ -2,6 +2,9 @@
 # @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+import base64
+import imghdr
+import io
 import json
 import logging
 import time
@@ -63,20 +66,93 @@ class StockpilotInventory(models.Model):
             _logger.error(f"Sync failed: {str(e)}", exc_info=True)
             return False
 
+    def _get_or_create_stockpilot_brand(self, config, brand_name):
+        """Get or create brand in Stockpilot, return PK"""
+        if not brand_name:
+            return None
+        # Try to find brand by name
+        response = self._call_stockpilot_api(
+            config, "/brands", method="GET", params={"name": brand_name}
+        )
+        if response and isinstance(response, list):
+            for brand in response:
+                if brand.get("name", "").lower() == brand_name.lower():
+                    return brand["id"]
+        # Create brand if not found
+        response = self._call_stockpilot_api(
+            config, "/brands/create", {"name": brand_name}, method="POST"
+        )
+        if response and response.get("id"):
+            return response["id"]
+        return None
+
+    def _get_or_create_stockpilot_category(self, config, category_name):
+        """Get or create category in Stockpilot, return PK"""
+        if not category_name:
+            return None
+        # Try to find category by name
+        response = self._call_stockpilot_api(
+            config, "/categories", method="GET", params={"name": category_name}
+        )
+        if response and isinstance(response, list):
+            for cat in response:
+                if cat.get("name", "").lower() == category_name.lower():
+                    return cat["id"]
+        # Create category if not found
+        response = self._call_stockpilot_api(
+            config, "/categories/create", {"name": category_name}, method="POST"
+        )
+        if response and response.get("id"):
+            return response["id"]
+        return None
+
     def _handle_product_header(self, config, product_template):
-        """Handle product header creation/verification"""
+        """Handle product header creation/verification (Product Group in Stockpilot)"""
         product_id = product_template.stockpilot_id
+
+        # Get brand and category PKs from Stockpilot
+        brand_name = (
+            getattr(product_template, "brand_id", False)
+            and product_template.brand_id.name
+            or None
+        )
+        category_name = (
+            product_template.categ_id and product_template.categ_id.name or None
+        )
+        brand_pk = self._get_or_create_stockpilot_brand(config, brand_name) or 1
+        category_pk = (
+            self._get_or_create_stockpilot_category(config, category_name) or 1
+        )
+
+        # Prepare image (base64)
+        image_b64 = None
+        if hasattr(product_template, "image_1920") and product_template.image_1920:
+            if isinstance(product_template.image_1920, bytes):
+                image_b64 = base64.b64encode(product_template.image_1920).decode(
+                    "utf-8"
+                )
+            else:
+                image_b64 = product_template.image_1920
+
+        # Prepare description (use description_sale if available)
+        description = (
+            getattr(product_template, "description_sale", None)
+            or product_template.description
+            or ""
+        )
 
         if not product_id:
             product_header_payload = {
                 "title": product_template.name,
-                "description": product_template.description or "",
-                "brand": 1,
-                "category": 1,
+                "description": description,
+                "brand": brand_pk,  # integer ID
+                "category": category_pk,  # integer ID
                 "is_active": product_template.active,
             }
 
-            _logger.info("Creating product header...")
+            _logger.info(
+                f"Creating product header (Product Group) for {product_template.name}..."
+            )
             header_response = self._call_stockpilot_api(
                 config, "/products/create", product_header_payload, method="POST"
             )
@@ -96,6 +172,35 @@ class StockpilotInventory(models.Model):
                 }
             )
             _logger.info(f"Verified product header with ID: {product_id}")
+        else:
+            # Update product group if already exists
+            product_header_payload = {
+                "title": product_template.name,
+                "description": description,
+                "brand": brand_pk,  # integer ID
+                "category": category_pk,  # integer ID
+                "is_active": product_template.active,
+            }
+            endpoint = f"/products/{product_id}"
+            self._call_stockpilot_api(
+                config, endpoint, product_header_payload, method="PUT"
+            )
+
+        # Upload image if present using the set-image endpoint (multipart/form-data)
+        if image_b64:
+            image_bytes = base64.b64decode(image_b64)
+            image_type = imghdr.what(None, h=image_bytes)
+            if not image_type:
+                image_type = "png"  # fallback
+            filename = f"product_image.{image_type}"
+            files = {"image_file": (filename, io.BytesIO(image_bytes))}
+            self._call_stockpilot_api(
+                config,
+                f"/products/{product_id}/set-image",
+                data=None,
+                method="POST",
+                files=files,
+            )
 
         return product_id
 
@@ -181,6 +286,24 @@ class StockpilotInventory(models.Model):
 
     def _prepare_inventory_payload(self, variant, product_id, variant_code, barcode):
         """Prepare inventory payload for API call"""
+        # Get image from template or variant
+        image_b64 = None
+        if hasattr(variant, "image_1920") and variant.image_1920:
+            image_b64 = (
+                variant.image_1920.decode()
+                if isinstance(variant.image_1920, bytes)
+                else variant.image_1920
+            )
+        elif (
+            hasattr(variant.product_tmpl_id, "image_1920")
+            and variant.product_tmpl_id.image_1920
+        ):
+            image_b64 = (
+                variant.product_tmpl_id.image_1920.decode()
+                if isinstance(variant.product_tmpl_id.image_1920, bytes)
+                else variant.product_tmpl_id.image_1920
+            )
+
         return {
             "product_id": product_id,
             "title": variant.name,
@@ -199,6 +322,7 @@ class StockpilotInventory(models.Model):
             "condition": "NEW",
             "vat_class": "standard_rate",
             "is_active": variant.active,
+            "image": image_b64,
         }
 
     def _update_inventory(self, config, inventory_id, payload, variant_code):
@@ -218,15 +342,19 @@ class StockpilotInventory(models.Model):
         response = self._call_stockpilot_api(
             config, "/inventory/create", payload, method="POST"
         )
-        if response and response.get("product_id"):
+        if response and response.get("item_id"):
             variant.write(
                 {
-                    "stockpilot_id": response["product_id"],
+                    # Optionally store item_id if you have a field for it
+                    # "stockpilot_inventory_id": response["item_id"],
                     "stockpilot_config_id": config.id,
                     "exported_to_stockpilot": True,
                 }
             )
-            _logger.info(f"Successfully created inventory for {variant_code}")
+            _logger.info(
+                f"Successfully created inventory for {variant_code} "
+                f"(item_id: {response['item_id']})"
+            )
             return True
         _logger.error(f"Failed to create inventory for {variant_code}")
         return False
@@ -293,23 +421,31 @@ class StockpilotInventory(models.Model):
             return False
 
     def _call_stockpilot_api(
-        self, config, endpoint, data=None, method="POST", params=None
+        self, config, endpoint, data=None, method="POST", params=None, files=None
     ):
-        """Enhanced API call that handles both POST and GET requests"""
+        """Enhanced API call that handles both POST and GET requests,
+        and supports file upload."""
         base_url = config.base_url.rstrip("/")
         url = f"{base_url}{endpoint}"
 
         headers = {
             "X-CLIENT-ID": config.api_client_id,
             "X-CLIENT-SECRET": config.api_client_secret,
-            "Content-Type": "application/json",
         }
+        # Only set Content-Type for JSON requests
+        if not files:
+            headers["Content-Type"] = "application/json"
 
         _logger.info(f"[Stockpilot] Calling {method} {url}")
         if params:
             _logger.info(f"[Stockpilot] Params: {params}")
-        if data:
+        if data and not files:
             _logger.info(f"[Stockpilot] Payload: {json.dumps(data, indent=2)}")
+        if files:
+            _logger.info(
+                f"[Stockpilot] Sending multipart/form-data with files: "
+                f"{list(files.keys())}"
+            )
 
         try:
             with requests.Session() as session:
@@ -327,6 +463,10 @@ class StockpilotInventory(models.Model):
                     response = session.get(
                         url, headers=headers, params=params, timeout=15
                     )
+                elif files:
+                    response = session.request(
+                        method, url, data=data, files=files, headers=headers, timeout=30
+                    )
                 else:
                     response = session.request(
                         method, url, json=data, headers=headers, timeout=15
@@ -340,7 +480,8 @@ class StockpilotInventory(models.Model):
 
         except requests.exceptions.RequestException as e:
             error_msg = (
-                f"Stockpilot API Error: {e.response.status_code} {e.response.reason}"
+                f"Stockpilot API Error: "
+                f"{e.response.status_code} {e.response.reason}"
             )
             if e.response.text:
                 error_msg += f"\n{e.response.text}"

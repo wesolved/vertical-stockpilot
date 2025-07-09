@@ -6,8 +6,7 @@ import time
 from datetime import datetime
 
 import requests
-from odoo import _, fields, models
-from odoo.exceptions import UserError
+from odoo import fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class StockpilotSync(models.Model):
     def _get_stockpilot_orders(self, config):
         """Fetch ALL orders from Stockpilot API with dynamic pagination"""
         try:
-            base_url = f"{config.base_url.rstrip('/')}/orders"
+            base_url = f"{config.base_url.rstrip('/')}/api/orders"
             headers = {
                 "X-CLIENT-ID": config.api_client_id,
                 "X-CLIENT-SECRET": config.api_client_secret,
@@ -86,7 +85,8 @@ class StockpilotSync(models.Model):
 
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
-            raise UserError(_("No Stockpilot configurations found"))
+            _logger.info("No Stockpilot configurations found - skipping order import")
+            return True
 
         for config in configs:
             orders = self._get_stockpilot_orders(config)
