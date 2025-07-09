@@ -18,7 +18,7 @@ class StockpilotSync(models.Model):
     def _get_stockpilot_orders(self, config):
         """Fetch ALL orders from Stockpilot API with dynamic pagination"""
         try:
-            base_url = f"{config.base_url.rstrip('/')}/api/orders"
+            base_url = f"{config.base_url.rstrip('/')}/orders"
             headers = {
                 "X-CLIENT-ID": config.api_client_id,
                 "X-CLIENT-SECRET": config.api_client_secret,
@@ -81,8 +81,7 @@ class StockpilotSync(models.Model):
             return None
 
     def _fetch_stockpilot_orders(self):
-        _logger.info("Starting Stockpilot order import")
-
+        """Fetch and process all Stockpilot orders for all configurations."""
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
             _logger.info("No Stockpilot configurations found - skipping order import")
@@ -99,7 +98,8 @@ class StockpilotSync(models.Model):
         return True
 
     def _process_stockpilot_order(self, order_data, company):
-        _logger.info(f"Processing order {order_data.get('order_number')}")
+        """Process a single Stockpilot order and create or
+        update the corresponding Odoo sale order."""
 
         try:
             existing_order = self.env["sale.order"].search(
@@ -112,14 +112,16 @@ class StockpilotSync(models.Model):
 
             channel_name = order_data.get("sales_channel")
             team_id = self._get_odoo_team_for_channel(channel_name, company)
-            partner = self._find_or_create_customer(order_data, company)
+            partners = self._find_or_create_customer(order_data, company)
             order_date = self._parse_order_date(order_data.get("order_placed_dt"))
 
             if existing_order:
                 _logger.info(f"Updating order {order_data.get('order_number')}")
                 existing_order.write(
                     {
-                        "partner_id": partner.id,
+                        "partner_id": partners["company"].id,  # Set to company
+                        "partner_invoice_id": partners["invoice"].id,
+                        "partner_shipping_id": partners["delivery"].id,
                         "date_order": order_date,
                         "team_id": team_id.id if team_id else False,
                         "note": f"Updated {order_data.get('handle', 'Unknown')}",
@@ -132,11 +134,12 @@ class StockpilotSync(models.Model):
                 )
                 return True
 
-            _logger.info(f"Creating new order for {order_data.get('order_number')}")
             order_vals = {
                 "stockpilot_order_id": order_data.get("id"),
                 "name": order_data.get("order_number"),
-                "partner_id": partner.id,
+                "partner_id": partners["company"].id,  # Set to company
+                "partner_invoice_id": partners["invoice"].id,
+                "partner_shipping_id": partners["delivery"].id,
                 "date_order": order_date,
                 "company_id": company.id,
                 "team_id": team_id.id if team_id else False,
@@ -214,41 +217,202 @@ class StockpilotSync(models.Model):
         return False
 
     def _find_or_create_customer(self, order_data, company):
-        """Find or create customer with company context"""
-        stockpilot_customer_id = order_data.get("customer", {}).get("id")
-        email = order_data.get("customer_email")
-        phone = order_data.get("customer_phone")
-        name = order_data.get("customer_name", "Stockpilot Customer")
-
+        """Find or create the customer, invoice, delivery, and
+        main contact partners in Odoo from Stockpilot order data"""
+        # Extract customer and address info from order_details
+        order_details = order_data.get("order_details", {})
+        customer_info = {
+            "company_name": order_details.get("billing_company"),
+            "main_email": order_details.get("customer_email"),
+            "phone": order_details.get("customer_phone"),
+            "billing_address": {
+                "address_line": order_details.get("billing_street"),
+                "zipcode": order_details.get("billing_zipcode"),
+                "city": order_details.get("billing_city"),
+                "country": order_details.get("billing_country"),
+            },
+            "shipping_address": {
+                "address_line": order_details.get("shipment_street"),
+                "zipcode": order_details.get("shipment_zipcode"),
+                "city": order_details.get("shipment_city"),
+                "country": order_details.get("shipment_country"),
+            },
+            "vat": order_details.get("vat_number"),
+            "website": None,  # Not available in order_details
+            "main_contact": {
+                "first_name": order_details.get("billing_firstname"),
+                "last_name": order_details.get("billing_lastname"),
+                "email": order_details.get("customer_email"),
+                "phone": order_details.get("customer_phone"),
+            },
+            "invoice_email": order_details.get("customer_email"),
+            "orders_email": order_details.get("customer_email"),
+        }
+        _logger.info("[Stockpilot Sync] Incoming customer_info: %s", customer_info)
+        # The rest of the function remains unchanged, using customer_info as before
+        stockpilot_customer_id = None  # Not available in this payload
+        company_name = (
+            customer_info.get("company_name")
+            or order_data.get("customer_name")
+            or "Stockpilot Customer"
+        )
+        website = customer_info.get("website")
+        vat = customer_info.get("vat")
+        phone = customer_info.get("phone")
+        main_email = customer_info.get("main_email")
+        invoice_email = customer_info.get("invoice_email")
+        orders_email = customer_info.get("orders_email")
+        billing = customer_info.get("billing_address", {})
+        shipping = customer_info.get("shipping_address", {})
+        main_contact = customer_info.get("main_contact", {})
+        main_firstname = main_contact.get("first_name")
+        main_lastname = main_contact.get("last_name")
+        main_contact_email = main_contact.get("email")
+        main_contact_phone = main_contact.get("phone")
         domain = [("company_id", "=", company.id)]
-
+        partner_obj = self.env["res.partner"]
+        # 1. Find or create the company (is_company=True)
+        company_partner = None
         if stockpilot_customer_id:
-            existing = self.env["res.partner"].search(
-                domain + [("stockpilot_customer_id", "=", stockpilot_customer_id)],
+            company_partner = partner_obj.search(
+                domain
+                + [
+                    ("stockpilot_customer_id", "=", stockpilot_customer_id),
+                    ("is_company", "=", True),
+                ],
                 limit=1,
             )
-            if existing:
-                return existing
-
-        if email:
-            existing = self.env["res.partner"].search(
-                domain + [("email", "=", email)], limit=1
+        if not company_partner and vat:
+            company_partner = partner_obj.search(
+                domain + [("vat", "=", vat), ("is_company", "=", True)],
+                limit=1,
             )
-            if existing:
-                if stockpilot_customer_id and not existing.stockpilot_customer_id:
-                    existing.stockpilot_customer_id = stockpilot_customer_id
-                return existing
+        if not company_partner and main_email:
+            company_partner = partner_obj.search(
+                domain
+                + [
+                    ("email", "=", main_email),
+                    ("is_company", "=", True),
+                ],
+                limit=1,
+            )
 
-        return self.env["res.partner"].create(
-            {
-                "name": name,
-                "email": email,
-                "phone": phone,
-                "company_id": company.id,
-                "stockpilot_customer_id": stockpilot_customer_id,
-                "customer_rank": 1,
+        def get_address_vals(addr, label):
+            street = addr.get("address_line")
+            zip_code = addr.get("zipcode")
+            city = addr.get("city")
+            country_code = addr.get("country")
+            country_id = False
+            if country_code:
+                country_id = (
+                    self.env["res.country"]
+                    .search([("code", "=", country_code)], limit=1)
+                    .id
+                )
+                if not country_id:
+                    _logger.warning(
+                        f"[Stockpilot Sync] {label} country code"
+                        " '{country_code}' not found in Odoo!"
+                    )
+            if not street or not zip_code or not city:
+                _logger.warning(
+                    f"[Stockpilot Sync] {label} address missing fields: "
+                    f"street={street}, zip={zip_code}, city={city}"
+                )
+            return {
+                "street": street,
+                "zip": zip_code,
+                "city": city,
+                "country_id": country_id,
             }
+
+        billing_vals = get_address_vals(billing, "Billing")
+        shipping_vals = get_address_vals(shipping, "Shipping")
+        company_vals = {
+            "name": company_name,
+            "website": website,
+            "vat": vat,
+            "phone": phone,
+            "email": main_email,
+            "stockpilot_customer_id": stockpilot_customer_id,
+            "is_company": True,
+            "company_id": company.id,
+            "customer_rank": 1,
+            **billing_vals,
+        }
+        if company_partner:
+            company_partner.write({k: v for k, v in company_vals.items() if v})
+        else:
+            company_partner = partner_obj.create(
+                {k: v for k, v in company_vals.items() if v}
+            )
+        # 2. Invoice address (child)
+        invoice_vals = {
+            "parent_id": company_partner.id,
+            "type": "invoice",
+            "name": f"{company_name}",
+            **billing_vals,
+            "email": invoice_email or main_email,
+            "phone": phone,
+        }
+        invoice_partner = partner_obj.search(
+            [("parent_id", "=", company_partner.id), ("type", "=", "invoice")], limit=1
         )
+        if invoice_partner:
+            invoice_partner.write({k: v for k, v in invoice_vals.items() if v})
+        else:
+            invoice_partner = partner_obj.create(
+                {k: v for k, v in invoice_vals.items() if v}
+            )
+        # 3. Delivery address (child)
+        delivery_vals = {
+            "parent_id": company_partner.id,
+            "type": "delivery",
+            "name": f"{company_name}",
+            **shipping_vals,
+            "email": orders_email or main_email,
+            "phone": phone,
+        }
+        delivery_partner = partner_obj.search(
+            [("parent_id", "=", company_partner.id), ("type", "=", "delivery")], limit=1
+        )
+        if delivery_partner:
+            delivery_partner.write({k: v for k, v in delivery_vals.items() if v})
+        else:
+            delivery_partner = partner_obj.create(
+                {k: v for k, v in delivery_vals.items() if v}
+            )
+        # 4. Main contact (person, child)
+        main_contact_vals = {
+            "parent_id": company_partner.id,
+            "type": "contact",
+            "name": f"{main_firstname or ''} {main_lastname or ''}".strip()
+            or company_name,
+            "email": main_contact_email or main_email,
+            "phone": main_contact_phone or phone,
+        }
+        main_contact_partner = partner_obj.search(
+            [
+                ("parent_id", "=", company_partner.id),
+                ("type", "=", "contact"),
+                ("email", "=", main_contact_email or main_email),
+            ],
+            limit=1,
+        )
+        if main_contact_partner:
+            main_contact_partner.write(
+                {k: v for k, v in main_contact_vals.items() if v}
+            )
+        else:
+            main_contact_partner = partner_obj.create(
+                {k: v for k, v in main_contact_vals.items() if v}
+            )
+        return {
+            "company": company_partner,
+            "invoice": invoice_partner,
+            "delivery": delivery_partner,
+            "main_contact": main_contact_partner,
+        }
 
     def _create_order_from_stockpilot(self, order_data, company):
         """Create new Odoo order from Stockpilot data"""
