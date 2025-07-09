@@ -99,10 +99,6 @@ class StockpilotBatchExport(models.Model):
         product = self.env["product.product"].browse(product_id)
         inventory_model = self.env["stockpilot.inventory"]
 
-        _logger.info(
-            f"[Stockpilot Export] Processing product: {product.default_code} (ID: {product.id})"
-        )
-
         try:
             # Check if product should be synced
             if not inventory_model._should_sync_product(product.product_tmpl_id):
