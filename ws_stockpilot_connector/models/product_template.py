@@ -15,7 +15,9 @@ class ProductTemplate(models.Model):
 
     stockpilot_id = fields.Char(string="Stockpilot Product ID", copy=False)
     exported_to_stockpilot = fields.Boolean(
-        string="Exported to Stockpilot", default=False
+        string="Exported to Stockpilot",
+        compute="_compute_exported_to_stockpilot",
+        store=True,
     )
     stockpilot_config_id = fields.Many2one(
         "stockpilot.configuration",
@@ -39,6 +41,19 @@ class ProductTemplate(models.Model):
             "condition": "NEW",
             "vat_class": "standard_rate",
             "is_active": product_tmpl.active,
+            "brand": (
+                product_tmpl.product_brand_id.name
+                if product_tmpl.product_brand_id
+                else "Brandless"
+            ),
+            "category": (
+                product_tmpl.categ_id.name if product_tmpl.categ_id else "Uncategorized"
+            ),
+            "image": (
+                product_tmpl.image_1920.decode("utf-8")
+                if product_tmpl.image_1920
+                else None
+            ),
         }
 
         _logger.info(f"Exporting product template: {product_tmpl.id}")
@@ -55,3 +70,10 @@ class ProductTemplate(models.Model):
         else:
             _logger.error(f"Failed to export product template {product_tmpl.id}")
             return False
+
+    def _compute_exported_to_stockpilot(self):
+        for template in self:
+            template.exported_to_stockpilot = any(
+                variant.exported_to_stockpilot
+                for variant in template.product_variant_ids
+            )

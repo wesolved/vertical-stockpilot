@@ -63,6 +63,11 @@ class StockpilotBatchExport(models.Model):
             ]
         )
 
+        _logger.info(
+            f"[Stockpilot Export] Found {len(products)} products to export: "
+            f"{[p.default_code for p in products]}"
+        )
+
         if not products:
             raise UserError(_("No products with SKU found to export"))
 
@@ -74,6 +79,10 @@ class StockpilotBatchExport(models.Model):
 
         # Create individual jobs for each product within the batch
         for product in products:
+            _logger.info(
+                f"[Stockpilot Export] Queuing export for product: "
+                f"{product.default_code} (ID: {product.id})"
+            )
             self.with_context(job_batch=job_batch).with_delay()._export_single_product(
                 product.id
             )
@@ -89,6 +98,10 @@ class StockpilotBatchExport(models.Model):
 
         product = self.env["product.product"].browse(product_id)
         inventory_model = self.env["stockpilot.inventory"]
+
+        _logger.info(
+            f"[Stockpilot Export] Processing product: {product.default_code} (ID: {product.id})"
+        )
 
         try:
             # Check if product should be synced

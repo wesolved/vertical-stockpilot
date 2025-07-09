@@ -4,7 +4,7 @@
         <field name="model_id" ref="model_stockpilot_sync" />
         <field name="state">code</field>
         <field name="code">model.with_delay()._fetch_stockpilot_orders()</field>
-        <field name="interval_number">2</field>
+        <field name="interval_number">5</field>
         <field name="interval_type">minutes</field>
         <field name="numbercall">-1</field>
         <field name="priority">5</field>
