@@ -1,5 +1,6 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
+# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import logging
 import time
@@ -344,11 +345,9 @@ class StockpilotSync(models.Model):
             **billing_vals,
         }
         if company_partner:
-            company_partner.write({k: v for k, v in company_vals.items() if v})
+            company_partner.write(company_vals)
         else:
-            company_partner = partner_obj.create(
-                {k: v for k, v in company_vals.items() if v}
-            )
+            company_partner = partner_obj.create(company_vals)
         # 2. Invoice address (child)
         invoice_vals = {
             "parent_id": company_partner.id,
@@ -362,11 +361,9 @@ class StockpilotSync(models.Model):
             [("parent_id", "=", company_partner.id), ("type", "=", "invoice")], limit=1
         )
         if invoice_partner:
-            invoice_partner.write({k: v for k, v in invoice_vals.items() if v})
+            invoice_partner.write(invoice_vals)
         else:
-            invoice_partner = partner_obj.create(
-                {k: v for k, v in invoice_vals.items() if v}
-            )
+            invoice_partner = partner_obj.create(invoice_vals)
         # 3. Delivery address (child)
         delivery_vals = {
             "parent_id": company_partner.id,
@@ -380,11 +377,9 @@ class StockpilotSync(models.Model):
             [("parent_id", "=", company_partner.id), ("type", "=", "delivery")], limit=1
         )
         if delivery_partner:
-            delivery_partner.write({k: v for k, v in delivery_vals.items() if v})
+            delivery_partner.write(delivery_vals)
         else:
-            delivery_partner = partner_obj.create(
-                {k: v for k, v in delivery_vals.items() if v}
-            )
+            delivery_partner = partner_obj.create(delivery_vals)
         # 4. Main contact (person, child)
         main_contact_vals = {
             "parent_id": company_partner.id,
@@ -403,13 +398,9 @@ class StockpilotSync(models.Model):
             limit=1,
         )
         if main_contact_partner:
-            main_contact_partner.write(
-                {k: v for k, v in main_contact_vals.items() if v}
-            )
+            main_contact_partner.write(main_contact_vals)
         else:
-            main_contact_partner = partner_obj.create(
-                {k: v for k, v in main_contact_vals.items() if v}
-            )
+            main_contact_partner = partner_obj.create(main_contact_vals)
         return {
             "company_address": company_partner,
             "invoice_address": invoice_partner,
