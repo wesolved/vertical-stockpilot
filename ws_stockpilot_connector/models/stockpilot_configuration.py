@@ -312,13 +312,15 @@ class StockpilotConfiguration(models.Model):
         """Button action to create batch export job for products to Stockpilot"""
         self.ensure_one()
         try:
-            # Create a new batch export
+            # Create a new OCA job batch
             export_time = fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             batch_export_name = _("Batch Export - %s") % export_time
+            job_batch = self.env["queue.job.batch"].get_new_batch(batch_export_name)
             batch_export = self.env["stockpilot.batch.export"].create(
                 {
                     "name": batch_export_name,
                     "config_id": self.id,
+                    "job_batch_id": job_batch.id,
                 }
             )
 
