@@ -29,13 +29,9 @@ if records:
         "config_id": config.id,
         "job_batch_id": job_batch.id,
     })
-    product_ids = []
+    # Export each template directly (not via variant)
     for template in records:
-        for variant in template.product_variant_ids:
-            product_ids.append(variant.id)
-            variant.write({"exported_to_stockpilot": True})
-    for product_id in product_ids:
-        batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(product_id)
+        batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(template.id)
     job_batch.enqueue()
         </field>
     </record>

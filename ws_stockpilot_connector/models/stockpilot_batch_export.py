@@ -93,12 +93,42 @@ class StockpilotBatchExport(models.Model):
         return True
 
     def _export_single_product(self, product_id):
-        """Export a single product - this runs as a job within the batch"""
+        """Export a single product or template - this runs as a job within the batch"""
         self.ensure_one()
 
-        product = self.env["product.product"].browse(product_id)
+        Product = self.env["product.product"]
+        Template = self.env["product.template"]
         inventory_model = self.env["stockpilot.inventory"]
 
+        # Try to find as a template first
+        template = Template.browse(product_id)
+        if template and template.exists():
+            # Export the template (creates Product Group in Stockpilot)
+            try:
+                # Export the template (creates Product Group)
+                result = inventory_model.with_context(
+                    stockpilot_config=self.config_id
+                )._trigger_stock_update(template.product_variant_ids[:1])
+                # Export all variants (link to Product Group)
+                for variant in template.product_variant_ids:
+                    inventory_model.with_context(
+                        stockpilot_config=self.config_id
+                    )._trigger_stock_update(variant)
+                _logger.info(
+                    _("Product template %s exported successfully") % template.name
+                )
+            except Exception as e:
+                error_msg = str(e)
+                _logger.error(
+                    _("Product template %s export error: %s")
+                    % (template.name, error_msg),
+                    exc_info=True,
+                )
+                raise
+            return
+
+        # Otherwise, treat as a product variant
+        product = Product.browse(product_id)
         try:
             # Check if product should be synced
             if not inventory_model._should_sync_product(product.product_tmpl_id):
