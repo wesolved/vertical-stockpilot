@@ -8,6 +8,8 @@ from datetime import datetime
 from odoo import _, fields, models
 from odoo.exceptions import UserError
 
+# Import will be handled dynamically to avoid circular imports
+
 _logger = logging.getLogger(__name__)
 
 
@@ -115,16 +117,15 @@ class StockpilotBatchExport(models.Model):
                         stockpilot_config=self.config_id
                     )._trigger_stock_update(variant)
                 _logger.info(
-                    _("Product template %s exported successfully") % template.name
+                    _(f"Product template {template.name} exported successfully")
                 )
             except Exception as e:
                 error_msg = str(e)
                 _logger.error(
-                    _("Product template %s export error: %s")
-                    % (template.name, error_msg),
+                    _(f"Product template {template.name} export error: {error_msg}"),
                     exc_info=True,
                 )
-                raise
+                raise  # Always re-raise so the job fails
             return
 
         # Otherwise, treat as a product variant
@@ -133,16 +134,19 @@ class StockpilotBatchExport(models.Model):
             # Check if product should be synced
             if not inventory_model._should_sync_product(product.product_tmpl_id):
                 _logger.warning(
-                    _("Product %s skipped - sync conditions not met")
-                    % product.default_code
+                    _(
+                        f"Product {product.default_code} skipped - sync conditions not met"
+                    )
                 )
                 return True
 
             # Check for duplicate EAN
             if self._has_duplicate_ean(product):
                 _logger.warning(
-                    _("Product %s skipped - duplicate EAN %s")
-                    % (product.default_code, product.barcode)
+                    _(
+                        f"Product {product.default_code} skipped -"
+                        " duplicate EAN {product.barcode}"
+                    )
                 )
                 return True
 
@@ -152,20 +156,17 @@ class StockpilotBatchExport(models.Model):
             )._trigger_stock_update(product)
 
             if result:
-                _logger.info(
-                    _("Product %s exported successfully") % product.default_code
-                )
+                _logger.info(_(f"Product {product.default_code} exported successfully"))
             else:
-                _logger.error(_("Product %s export failed") % product.default_code)
+                _logger.error(_(f"Product {product.default_code} export failed"))
 
         except Exception as e:
             error_msg = str(e)
             _logger.error(
-                _("Product %s export error: %s") % (product.default_code, error_msg),
+                _(f"Product {product.default_code} export error: {error_msg}"),
                 exc_info=True,
             )
-            # Re-raise the exception so the job fails properly in OCA batch
-            raise
+            raise  # Always re-raise so the job fails
 
     def _has_duplicate_ean(self, product):
         """Check if product has duplicate EAN with other products"""

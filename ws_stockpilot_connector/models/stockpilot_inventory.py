@@ -18,6 +18,18 @@ from urllib3.util.retry import Retry
 _logger = logging.getLogger(__name__)
 
 
+class StockpilotAPIError(Exception):
+    """Custom exception for Stockpilot API errors that will fail queue jobs"""
+
+    def __init__(self, message, error_details=None):
+        super().__init__(message)
+        self.message = message
+        self.error_details = error_details or {}
+
+    def __str__(self):
+        return self.message
+
+
 class StockpilotInventory(models.Model):
     _name = "stockpilot.inventory"
     _description = "Stockpilot Inventory Synchronization"
@@ -93,7 +105,7 @@ class StockpilotInventory(models.Model):
 
         except Exception as e:
             _logger.error(f"Sync failed: {str(e)}", exc_info=True)
-            return False
+            raise  # Re-raise the exception to fail the job
 
     def _get_or_create_stockpilot_brand(self, config, brand_name):
         """Get or create brand in Stockpilot, return PK"""
@@ -335,7 +347,7 @@ class StockpilotInventory(models.Model):
 
         except Exception as e:
             _logger.error(f"Error processing variant {variant_code}: {str(e)}")
-            return False
+            raise  # Re-raise the exception to fail the job
 
     def _get_existing_inventory(self, config, variant, variant_code, barcode):
         """Check for existing inventory in Stockpilot"""
@@ -422,7 +434,9 @@ class StockpilotInventory(models.Model):
             _logger.info(f"Successfully updated inventory for {variant_code}")
             return True
         _logger.error(f"Failed to update inventory for {variant_code}")
-        return False
+        raise Exception(
+            f"Failed to update inventory for {variant_code} - no valid response"
+        )
 
     def _create_inventory(self, config, payload, variant, variant_code):
         """Create new inventory item"""
@@ -444,7 +458,9 @@ class StockpilotInventory(models.Model):
             )
             return True
         _logger.error(f"Failed to create inventory for {variant_code}")
-        return False
+        raise Exception(
+            f"Failed to create inventory for {variant_code} - no valid response"
+        )
 
     def _find_or_create_product(self, item, company):
         """Find or create product from inventory data"""
@@ -511,7 +527,7 @@ class StockpilotInventory(models.Model):
         self, config, endpoint, data=None, method="POST", params=None, files=None
     ):
         """Enhanced API call that handles both POST and GET requests,
-        and supports file upload."""
+        and supports file upload. Fails the job if response is not 200."""
         base_url = config.base_url.rstrip("/")
         url = f"{base_url}{endpoint}"
 
@@ -559,24 +575,81 @@ class StockpilotInventory(models.Model):
                         method, url, json=data, headers=headers, timeout=15
                     )
 
-                response.raise_for_status()
+                # Enhanced error handling - fail job for any non-200 response
+                if response.status_code != 200:
+                    error_details = {
+                        "status_code": response.status_code,
+                        "reason": response.reason,
+                        "url": url,
+                        "method": method,
+                        "response_text": response.text,
+                        "headers": dict(response.headers),
+                    }
+
+                    # Try to parse JSON error response if available
+                    try:
+                        error_json = response.json()
+                        error_details["response_json"] = error_json
+                    except (ValueError, TypeError):
+                        # Response is not valid JSON, ignore and continue
+                        pass
+
+                    error_msg = (
+                        f"Stockpilot API Error: {response.status_code} {response.reason}\n"
+                        f"URL: {url}\n"
+                        f"Method: {method}\n"
+                        f"Response: {response.text}"
+                    )
+
+                    _logger.error(f"[Stockpilot] API call failed: {error_msg}")
+                    _logger.error(f"[Stockpilot] Error details: {error_details}")
+
+                    # Create a specific exception for API errors that will fail the job
+                    raise StockpilotAPIError(error_msg, error_details)
+
                 _logger.info(
                     f"[Stockpilot] Response: {response.status_code} {response.text}"
                 )
                 return response.json()
 
         except requests.exceptions.RequestException as e:
+            error_details = {
+                "status_code": e.response.status_code if e.response else None,
+                "reason": e.response.reason if e.response else str(e),
+                "url": url,
+                "method": method,
+                "exception_type": type(e).__name__,
+            }
+
+            if e.response is not None and e.response.text:
+                error_details["response_text"] = e.response.text
+
             error_msg = (
-                f"Stockpilot API Error: "
-                f"{e.response.status_code} {e.response.reason}"
+                f"Stockpilot API Request Error: "
+                f"{e.response.status_code if e.response else 'N/A'} "
+                f"{e.response.reason if e.response else str(e)}"
             )
-            if e.response.text:
+            if e.response is not None and e.response.text:
                 error_msg += f"\n{e.response.text}"
-            _logger.error(error_msg)
-            raise UserError(_(error_msg))
+
+            _logger.error(f"[Stockpilot] Request failed: {error_msg}")
+            _logger.error(f"[Stockpilot] Error details: {error_details}")
+
+            raise StockpilotAPIError(error_msg, error_details)
+
         except Exception as e:
-            _logger.exception("[Stockpilot] Unexpected error calling API")
-            raise UserError(_("Unexpected error calling Stockpilot API: %s") % str(e))
+            error_details = {
+                "url": url,
+                "method": method,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            }
+
+            error_msg = f"Unexpected error calling Stockpilot API: {str(e)}"
+            _logger.exception(f"[Stockpilot] {error_msg}")
+            _logger.error(f"[Stockpilot] Error details: {error_details}")
+
+            raise StockpilotAPIError(error_msg, error_details)
 
     def _create_stockpilot_product(self, product, config):
         """Create a new product in Stockpilot"""
