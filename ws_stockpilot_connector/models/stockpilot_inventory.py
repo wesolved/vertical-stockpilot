@@ -34,8 +34,15 @@ class StockpilotInventory(models.Model):
         return True
 
     def _trigger_stock_update(self, product, template_id=None):
-        """Handle product and inventory synchronization with Stockpilot (refactored)"""
-        product_template = product.product_tmpl_id
+        """Handle product and inventory synchronization with Stockpilot (refactored)
+        Always ensure the template is exported first and
+        only one Product Group is created per template.
+        """
+        # If called on a variant, always work with the template
+        if hasattr(product, "product_tmpl_id"):
+            product_template = product.product_tmpl_id
+        else:
+            product_template = product
 
         if not self._should_sync_product(product_template):
             return True
@@ -48,19 +55,41 @@ class StockpilotInventory(models.Model):
             _logger.error("No Stockpilot configuration found")
             return False
 
-        default_code = product_template.default_code or product.default_code
+        default_code = product_template.default_code or getattr(
+            product, "default_code", None
+        )
         if not default_code:
             _logger.error(f"Product {product_template.id} has no default code (SKU)")
             return False
 
         try:
-            product_id = self._handle_product_header(config, product_template)
-            if not product_id:
-                return False
+            # Always ensure the template is exported first
+            if not product_template.stockpilot_id:
+                _logger.info(
+                    f"No Stockpilot ID for template {product_template.name}, "
+                    f"creating Product Group..."
+                )
+                product_id = self._handle_product_header(config, product_template)
+                if not product_id:
+                    return False
+            else:
+                _logger.info(
+                    f"Using existing Stockpilot Product Group "
+                    f"{product_template.stockpilot_id} for template "
+                    f"{product_template.name}"
+                )
+                product_id = product_template.stockpilot_id
 
-            return self._process_variants(
-                config, product_template, product_id, default_code
-            )
+            # If called on a template, export all variants
+            if hasattr(product, "product_variant_ids"):
+                return self._process_variants(
+                    config, product_template, product_id, default_code
+                )
+            # If called on a variant, only export this variant
+            else:
+                return self._process_single_variant(
+                    config, product, product_id, default_code
+                )
 
         except Exception as e:
             _logger.error(f"Sync failed: {str(e)}", exc_info=True)
@@ -171,20 +200,60 @@ class StockpilotInventory(models.Model):
                     "stockpilot_config_id": config.id,
                 }
             )
+            # Refresh the template from the database to avoid duplicate Product Groups
+            product_template.invalidate_cache(["stockpilot_id"])
+            product_template = self.env["product.template"].browse(product_template.id)
             _logger.info(f"Verified product header with ID: {product_id}")
         else:
+            # Verify product still exists in Stockpilot before updating
+            if not self._verify_product(config, product_id):
+                _logger.warning(
+                    f"Product {product_id} no longer exists in Stockpilot. "
+                    f"Clearing stockpilot_id and creating new product."
+                )
+                # Clear the invalid stockpilot_id and create new product
+                product_template.write({"stockpilot_id": False})
+                return self._handle_product_header(config, product_template)
+
             # Update product group if already exists
             product_header_payload = {
+                "id": product_id,
                 "title": product_template.name,
                 "description": description,
                 "brand": brand_pk,  # integer ID
                 "category": category_pk,  # integer ID
                 "is_active": product_template.active,
             }
-            endpoint = f"/products/{product_id}"
-            self._call_stockpilot_api(
-                config, endpoint, product_header_payload, method="PUT"
-            )
+            try:
+                self._call_stockpilot_api(
+                    config, "products/update", product_header_payload, method="POST"
+                )
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    # Try alternative endpoint pattern
+                    try:
+                        _logger.info(
+                            f"Trying alternative update endpoint for product {product_id}"
+                        )
+                        self._call_stockpilot_api(
+                            config,
+                            f"products/{product_id}",
+                            product_header_payload,
+                            method="PUT",
+                        )
+                    except requests.exceptions.HTTPError as e2:
+                        if e2.response.status_code == 404:
+                            _logger.warning(
+                                f"Product {product_id} not found during update (404). "
+                                f"Clearing stockpilot_id and creating new product."
+                            )
+                            # Clear the invalid stockpilot_id and create new product
+                            product_template.write({"stockpilot_id": False})
+                            return self._handle_product_header(config, product_template)
+                        else:
+                            raise e2
+                else:
+                    raise
 
         # Upload image if present using the set-image endpoint (multipart/form-data)
         if image_b64:
@@ -214,6 +283,13 @@ class StockpilotInventory(models.Model):
                 _logger.error(f"Product {product_id} verification failed")
                 return False
             return True
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                _logger.warning(f"Product {product_id} not found in Stockpilot (404)")
+                return False
+            else:
+                _logger.error(f"Product verification HTTP error: {str(e)}")
+                return False
         except Exception as e:
             _logger.error(f"Product verification error: {str(e)}")
             return False
@@ -271,8 +347,19 @@ class StockpilotInventory(models.Model):
                     method="GET",
                     params={"id": variant.stockpilot_id},
                 )
-            except Exception:
-                pass
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    _logger.warning(
+                        f"Inventory item {variant.stockpilot_id} not "
+                        "found in Stockpilot (404). "
+                        f"Clearing invalid stockpilot_id for variant {variant_code}."
+                    )
+                    # Clear the invalid stockpilot_id
+                    variant.write({"stockpilot_id": False})
+                else:
+                    _logger.error(f"Inventory verification HTTP error: {str(e)}")
+            except Exception as e:
+                _logger.error(f"Inventory verification error: {str(e)}")
 
         try:
             return self._call_stockpilot_api(
@@ -1022,3 +1109,63 @@ class StockpilotInventory(models.Model):
                 exc_info=True,
             )
             return False
+
+    def cleanup_invalid_stockpilot_ids(self):
+        """Clean up invalid stockpilot IDs by verifying them against the API"""
+        config = self.env["stockpilot.configuration"].get_config()
+        if not config:
+            _logger.error("No Stockpilot configuration found for cleanup")
+            return {"cleared_products": 0, "cleared_variants": 0, "errors": 0}
+
+        results = {"cleared_products": 0, "cleared_variants": 0, "errors": 0}
+
+        # Clean up product templates with invalid stockpilot_id
+        product_templates = self.env["product.template"].search(
+            [("stockpilot_id", "!=", False)]
+        )
+
+        for template in product_templates:
+            try:
+                if not self._verify_product(config, template.stockpilot_id):
+                    template.write({"stockpilot_id": False})
+                    results["cleared_products"] += 1
+                    _logger.info(
+                        f"Cleared invalid stockpilot_id from product template {template.name}"
+                    )
+            except Exception as e:
+                results["errors"] += 1
+                _logger.error(
+                    f"Error verifying product template {template.id}: {str(e)}"
+                )
+
+        # Clean up product variants with invalid stockpilot_id
+        product_variants = self.env["product.product"].search(
+            [("stockpilot_id", "!=", False)]
+        )
+
+        for variant in product_variants:
+            try:
+                # Try to get inventory by ID
+                try:
+                    self._call_stockpilot_api(
+                        config,
+                        "/inventory/get",
+                        method="GET",
+                        params={"id": variant.stockpilot_id},
+                    )
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 404:
+                        variant.write({"stockpilot_id": False})
+                        results["cleared_variants"] += 1
+                        _logger.info(
+                            f"Cleared invalid stockpilot_id from variant "
+                            f"{variant.default_code}"
+                        )
+                    else:
+                        raise
+            except Exception as e:
+                results["errors"] += 1
+                _logger.error(f"Error verifying variant {variant.id}: {str(e)}")
+
+        _logger.info(f"Cleanup completed: {results}")
+        return results
