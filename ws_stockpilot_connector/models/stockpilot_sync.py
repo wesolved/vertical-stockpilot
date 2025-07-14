@@ -86,8 +86,14 @@ class StockpilotSync(models.Model):
 
         configs = self.env["stockpilot.configuration"].search([])
         if not configs:
-            _logger.info("No Stockpilot configurations found - skipping order import")
-            return True
+            message = "No Stockpilot configurations found - skipping order import"
+            _logger.info(message)
+            return message
+
+        total_orders = 0
+        updated_orders = 0
+        skipped_orders = 0
+        created_orders = 0
 
         for config in configs:
             orders = self._get_stockpilot_orders(config)
@@ -95,9 +101,94 @@ class StockpilotSync(models.Model):
                 continue
 
             for order_data in orders["results"]:
-                self._process_stockpilot_order(order_data, config.company_id)
+                total_orders += 1
+                result = self._process_stockpilot_order(order_data, config.company_id)
 
-        return True
+                # Track the result
+                if result is True:
+                    # Check if it was a new order or updated order
+                    existing_order = self.env["sale.order"].search(
+                        [
+                            ("stockpilot_order_id", "=", order_data.get("id")),
+                            ("company_id", "=", config.company_id.id),
+                        ],
+                        limit=1,
+                    )
+                    if existing_order:
+                        updated_orders += 1
+                    else:
+                        created_orders += 1
+                else:
+                    skipped_orders += 1
+
+        message = (
+            f"Stockpilot order import completed: "
+            f"Total: {total_orders}, "
+            f"Created: {created_orders}, "
+            f"Updated: {updated_orders}, "
+            f"Skipped: {skipped_orders}. "
+        )
+
+        _logger.info(message)
+        return message
+
+    def _has_order_changes(
+        self, existing_order, order_data, partners, order_date, team_id
+    ):
+        """Check if the order has any changes that need to be updated"""
+        try:
+            # Safely get partner IDs, handling cases where multiple partners might be assigned
+            existing_partner_id = (
+                existing_order.partner_id.id if existing_order.partner_id else False
+            )
+            existing_invoice_id = (
+                existing_order.partner_invoice_id.id
+                if existing_order.partner_invoice_id
+                else False
+            )
+            existing_shipping_id = (
+                existing_order.partner_shipping_id.id
+                if existing_order.partner_shipping_id
+                else False
+            )
+
+            # Check order header changes
+            if (
+                existing_partner_id != partners["company_address"].id
+                or existing_invoice_id != partners["invoice_address"].id
+                or existing_shipping_id != partners["delivery_address"].id
+                or existing_order.date_order != order_date
+                or existing_order.team_id.id != (team_id.id if team_id else False)
+            ):
+                return True
+
+            # Check if note would change
+            new_note = f"Updated {order_data.get('handle', 'Unknown')}"
+            if existing_order.note != new_note:
+                return True
+
+            # Check order line changes (simplified check)
+            line_items = order_data.get("order_details", {}).get("line_items", [])
+            existing_line_count = len(existing_order.order_line)
+            new_line_count = len(
+                [
+                    line
+                    for line in line_items
+                    if line.get("sales_channel_title", "").strip()
+                ]
+            )
+
+            if existing_line_count != new_line_count:
+                return True
+
+            return False
+
+        except Exception as e:
+            _logger.error(
+                f"Error checking order changes for order {existing_order.id}: {str(e)}"
+            )
+            # If there's an error checking changes, assume there are changes to be safe
+            return True
 
     def _process_stockpilot_order(self, order_data, company):
         """Process a single Stockpilot order and create or
@@ -118,19 +209,68 @@ class StockpilotSync(models.Model):
             order_date = self._parse_order_date(order_data.get("order_placed_dt"))
 
             if existing_order:
+                # Check if there are any changes before processing
+                if not self._has_order_changes(
+                    existing_order, order_data, partners, order_date, team_id
+                ):
+                    _logger.debug(
+                        f"No changes detected for order {order_data.get('order_number')},"
+                        f"skipping update"
+                    )
+                    return True
+
                 _logger.info(f"Updating order {order_data.get('order_number')}")
-                existing_order.write(
-                    {
-                        "partner_id": partners[
-                            "company_address"
-                        ].id,  # Set to company address
-                        "partner_invoice_id": partners["invoice_address"].id,
-                        "partner_shipping_id": partners["delivery_address"].id,
-                        "date_order": order_date,
-                        "team_id": team_id.id if team_id else False,
-                        "note": f"Updated {order_data.get('handle', 'Unknown')}",
-                    }
+
+                # Check if there are actual changes before writing
+                changes = {}
+
+                # Safely get existing partner IDs
+                existing_partner_id = (
+                    existing_order.partner_id.id if existing_order.partner_id else False
                 )
+                existing_invoice_id = (
+                    existing_order.partner_invoice_id.id
+                    if existing_order.partner_invoice_id
+                    else False
+                )
+                existing_shipping_id = (
+                    existing_order.partner_shipping_id.id
+                    if existing_order.partner_shipping_id
+                    else False
+                )
+
+                if existing_partner_id != partners["company_address"].id:
+                    changes["partner_id"] = partners["company_address"].id
+
+                if existing_invoice_id != partners["invoice_address"].id:
+                    changes["partner_invoice_id"] = partners["invoice_address"].id
+
+                if existing_shipping_id != partners["delivery_address"].id:
+                    changes["partner_shipping_id"] = partners["delivery_address"].id
+
+                if existing_order.date_order != order_date:
+                    changes["date_order"] = order_date
+
+                team_id_value = team_id.id if team_id else False
+                if existing_order.team_id.id != team_id_value:
+                    changes["team_id"] = team_id_value
+
+                new_note = f"Updated {order_data.get('handle', 'Unknown')}"
+                if existing_order.note != new_note:
+                    changes["note"] = new_note
+
+                # Only write if there are actual changes
+                if changes:
+                    existing_order.write(changes)
+                    _logger.debug(
+                        f"Updated order {existing_order.id} with changes:"
+                        f" {list(changes.keys())}"
+                    )
+                else:
+                    _logger.debug(
+                        f"No changes detected for order {existing_order.id}, skipping write"
+                    )
+
                 self._update_order_lines(
                     existing_order,
                     order_data.get("order_details", {}).get("line_items", []),
@@ -401,6 +541,31 @@ class StockpilotSync(models.Model):
             main_contact_partner.write(main_contact_vals)
         else:
             main_contact_partner = partner_obj.create(main_contact_vals)
+
+        # Validate that all partners are single records
+        try:
+            company_partner.ensure_one()
+            invoice_partner.ensure_one()
+            delivery_partner.ensure_one()
+            main_contact_partner.ensure_one()
+        except Exception as e:
+            _logger.error(f"Multiple partners found during customer creation: {str(e)}")
+            # If there are multiple partners, try to get the first one
+            company_partner = (
+                company_partner[0] if len(company_partner) > 1 else company_partner
+            )
+            invoice_partner = (
+                invoice_partner[0] if len(invoice_partner) > 1 else invoice_partner
+            )
+            delivery_partner = (
+                delivery_partner[0] if len(delivery_partner) > 1 else delivery_partner
+            )
+            main_contact_partner = (
+                main_contact_partner[0]
+                if len(main_contact_partner) > 1
+                else main_contact_partner
+            )
+
         return {
             "company_address": company_partner,
             "invoice_address": invoice_partner,
@@ -609,7 +774,8 @@ class StockpilotSync(models.Model):
             _logger.error(f"Failed to add shipping line: {str(e)}")
 
     def _update_order_lines(self, order, line_items, company):
-        """Update or create order lines from Stockpilot, skipping duplicates."""
+        """Update or create order lines from Stockpilot, skipping
+        duplicates and unnecessary updates."""
 
         config = self.env["stockpilot.configuration"].get_config(company.id)
 
@@ -649,14 +815,34 @@ class StockpilotSync(models.Model):
             taxes = self._get_taxes_for_line(line, config, company, product)
 
             if line_key in existing_lines:
-                existing_lines[line_key].write(
-                    {
-                        "price_unit": retail_price,
-                        "discount": discount_pct,
-                        "tax_id": [(6, 0, taxes.ids)],
-                        "name": name,
-                    }
-                )
+                existing_line = existing_lines[line_key]
+
+                # Check if there are actual changes before writing
+                changes = {}
+
+                if abs(existing_line.price_unit - retail_price) > 0.01:
+                    changes["price_unit"] = retail_price
+
+                if abs(existing_line.discount - discount_pct) > 0.01:
+                    changes["discount"] = discount_pct
+
+                if existing_line.tax_id != taxes:
+                    changes["tax_id"] = [(6, 0, taxes.ids)]
+
+                if existing_line.name != name:
+                    changes["name"] = name
+
+                # Only write if there are actual changes
+                if changes:
+                    existing_line.write(changes)
+                    _logger.debug(
+                        f"Updated order line {existing_line.id} with changes:"
+                        f" {list(changes.keys())}"
+                    )
+                else:
+                    _logger.debug(
+                        f"No changes detected for order line {existing_line.id}, skipping write"
+                    )
             else:
                 self.env["sale.order.line"].create(
                     {
