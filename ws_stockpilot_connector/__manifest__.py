@@ -13,6 +13,7 @@
     "depends": [
         "base",
         "sale_stock",
+        "queue_job",
         "queue_job_batch",
     ],
     "data": [

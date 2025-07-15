@@ -29,10 +29,42 @@ if records:
         "config_id": config.id,
         "job_batch_id": job_batch.id,
     })
+    # Debug logging
+    env["ir.logging"].create({
+        "name": "Stockpilot Export",
+        "type": "server",
+        "dbname": env.cr.dbname,
+        "level": "INFO",
+        "message": f"Created batch export: {batch_export.name} with job batch: {job_batch.name} (ID: {job_batch.id})",
+        "path": "stockpilot_batch_export",
+        "func": "action_export_to_stockpilot",
+        "line": 1,
+    })
     for rec in records:
         rec.write({"exported_to_stockpilot": True})
-        batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(rec.id)
+        # Try using the batch object directly in context
+        job = batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(rec.id)
+        env["ir.logging"].create({
+            "name": "Stockpilot Export",
+            "type": "server",
+            "dbname": env.cr.dbname,
+            "level": "INFO",
+            "message": f"Created job for product {rec.default_code}: {job.uuid}",
+            "path": "stockpilot_batch_export",
+            "func": "action_export_to_stockpilot",
+            "line": 1,
+        })
     job_batch.enqueue()
+    env["ir.logging"].create({
+        "name": "Stockpilot Export",
+        "type": "server",
+        "dbname": env.cr.dbname,
+        "level": "INFO",
+        "message": f"Batch enqueued. Final state: {job_batch.state}",
+        "path": "stockpilot_batch_export",
+        "func": "action_export_to_stockpilot",
+        "line": 1,
+    })
         </field>
     </record>
 </odoo>

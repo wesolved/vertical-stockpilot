@@ -31,6 +31,7 @@ if records:
     })
     # Export each template directly (not via variant)
     for template in records:
+        # Try using the batch object directly in context
         batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(template.id)
     job_batch.enqueue()
         </field>
