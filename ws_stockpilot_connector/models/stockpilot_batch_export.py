@@ -191,8 +191,10 @@ class StockpilotBatchExport(models.Model):
             )._trigger_stock_update(product)
 
             if result:
+                _logger.info(_(f"Product {product.default_code} exported successfully"))
                 return True
             else:
+                _logger.error(_(f"Product {product.default_code} export failed"))
                 return False
 
         except Exception as e:
