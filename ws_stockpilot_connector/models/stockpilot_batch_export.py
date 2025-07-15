@@ -73,24 +73,58 @@ class StockpilotBatchExport(models.Model):
         if not products:
             raise UserError(_("No products with SKU found to export"))
 
-        # Create OCA job batch
-        batch_name = _("Stockpilot Export - %s") % self.name
-        job_batch = self.env["queue.job.batch"].get_new_batch(batch_name)
+        # Use the existing job batch (already created in export_products method)
+        job_batch = self.job_batch_id
+        if not job_batch:
+            raise UserError(_("No job batch found for this export"))
 
-        self.write({"job_batch_id": job_batch.id})
+        _logger.info(
+            f"[Stockpilot Export] Using job batch: {job_batch.name} (ID: {job_batch.id})"
+        )
+        _logger.info(
+            f"[Stockpilot Export] Batch state before job creation: {job_batch.state}"
+        )
+
+        # Ensure batch is in draft state before adding jobs
+        if job_batch.state != "draft":
+            _logger.warning(
+                f"[Stockpilot Export] Batch is not in draft state: {job_batch.state}"
+            )
 
         # Create individual jobs for each product within the batch
+        job_count = 0
         for product in products:
             _logger.info(
                 f"[Stockpilot Export] Queuing export for product: "
                 f"{product.default_code} (ID: {product.id})"
             )
-            self.with_context(job_batch=job_batch).with_delay()._export_single_product(
-                product.id
+            # Try using the batch object directly in context
+            job = (
+                self.with_context(job_batch=job_batch)
+                .with_delay()
+                ._export_single_product(product.id)
             )
+            job_count += 1
+            _logger.info(f"[Stockpilot Export] Created job {job_count}: {job.uuid}")
+
+        _logger.info(
+            f"[Stockpilot Export] Created {job_count} jobs for batch {job_batch.id}"
+        )
+        _logger.info(
+            f"[Stockpilot Export] Batch state after job creation: {job_batch.state}"
+        )
+
+        # Refresh the batch to get updated job count
+        job_batch.invalidate_recordset()
+        _logger.info(
+            f"[Stockpilot Export] Batch job count after refresh: {job_batch.job_count}"
+        )
 
         # Enqueue the batch
         job_batch.enqueue()
+        _logger.info(
+            f"[Stockpilot Export] Batch enqueued. Final state: {job_batch.state}"
+        )
 
         return True
 
@@ -119,6 +153,7 @@ class StockpilotBatchExport(models.Model):
                 _logger.info(
                     _(f"Product template {template.name} exported successfully")
                 )
+                return True
             except Exception as e:
                 error_msg = str(e)
                 _logger.error(
@@ -156,9 +191,9 @@ class StockpilotBatchExport(models.Model):
             )._trigger_stock_update(product)
 
             if result:
-                _logger.info(_(f"Product {product.default_code} exported successfully"))
+                return True
             else:
-                _logger.error(_(f"Product {product.default_code} export failed"))
+                return False
 
         except Exception as e:
             error_msg = str(e)
