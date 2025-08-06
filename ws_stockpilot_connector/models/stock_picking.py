@@ -11,18 +11,18 @@ class StockPicking(models.Model):
 
     def _action_done(self):
         """
-        Overrides the stock.picking `_action_done` method.
+        Overrides the stock.picking `_action_done` method
+        to trigger Stockpilot forwarding for outgoing pickings.
+
+        Returns:
+            recordset: Result of the parent _action_done call.
         """
         res = super()._action_done()
         for picking in self:
             if picking.picking_type_id.code == "outgoing":
                 sale_order = picking.sale_id
-                if sale_order and sale_order.stockpilot_order_id:
-                    for move in picking.move_ids_without_package:
-                        if move.product_id.type == "product":
-                            config = self.env["stockpilot.configuration"].get_config()
-                            if config:
-                                self.env["stockpilot.inventory"].with_context(
-                                    stockpilot_config=config
-                                ).with_delay()._trigger_stock_update(move.product_id)
+                if sale_order and sale_order.stockpilot_id:
+                    sale_order.with_delay()._stockpilot_fulfill(
+                        picking.carrier_tracking_ref
+                    )
         return res

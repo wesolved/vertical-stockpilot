@@ -4,7 +4,7 @@
             <field name="inherit_id" ref="sale.view_quotation_tree_with_onboarding" />
             <field name="arch" type="xml">
                 <field name="name" position="after">
-                    <field name="stockpilot_order_id" />
+                    <field name="stockpilot_id" />
                 </field>
             </field>
         </record>
@@ -14,9 +14,8 @@
         <field name="inherit_id" ref="sale.view_sales_order_filter" />
         <field name="arch" type="xml">
             <search>
-                <field name="stockpilot_order_id" string="Stockpilot Order Number" />
-                <field name="stockpilot_order_id" string="Woo Order Ref" />
-                <filter string="Stockpilot Orders" name="stock_pilot_orders" domain="[('stockpilot_order_id', '!=', False)]" />
+                <field name="stockpilot_id" string="Stockpilot Order Number" />
+                <filter string="Stockpilot Orders" name="stock_pilot_orders" domain="[('stockpilot_id', '!=', False)]" />
             </search>
         </field>
     </record>

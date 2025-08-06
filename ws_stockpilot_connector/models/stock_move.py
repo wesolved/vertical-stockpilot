@@ -9,15 +9,17 @@ from odoo import models
 class StockMove(models.Model):
     _inherit = "stock.move"
 
-    def _action_done(self):
+    def _action_done(self, *args, **kwargs):
         """
         Call parent method and schedule Stockpilot stock update if transfer is done.
+
+        Returns:
+            recordset: Result of the parent _action_done call.
         """
-        res = super()._action_done()
-        if self.state == "done":
-            config = self.env["stockpilot.configuration"].get_config()
-            if config:
-                self.env["stockpilot.inventory"].with_context(
-                    stockpilot_config=config
-                ).with_delay(eta=60)._trigger_stock_update(self.product_id)
+        res = super()._action_done(*args, **kwargs)
+        if self.state == "done" and (
+            not self.picking_id
+            or (self.picking_id and self.picking_id.picking_type_id.code == "incoming")
+        ):
+            self.product_id.with_delay()._update_stockpilot_stock()
         return res

@@ -1,5 +1,5 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
+# @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import fields, models
@@ -8,32 +8,77 @@ from odoo import fields, models
 class ProductProduct(models.Model):
     _inherit = "product.product"
 
-    stockpilot_id = fields.Char(
-        string="Stockpilot ID",
-        help="Unique identifier for the product in Stockpilot.",
+    stockpilot_ids = fields.One2many(
+        "stockpilot.product.product", "product_product_id", copy=False
     )
 
-    exported_to_stockpilot = fields.Boolean(
-        string="Exported to Stockpilot",
-        help="Indicates whether the product has been exported to Stockpilot.",
-    )
-
-    stockpilot_config_id = fields.Many2one(
-        "stockpilot.configuration",
-        string="Stockpilot Configuration",
-        help="Configuration used to export this product to Stockpilot",
-        copy=False,
-    )
-
-    def write(self, vals):
+    def _update_stockpilot_stock(self):
         """
-        Update record and trigger Stockpilot sync on stock/code change.
+        Trigger an inventory update towards Stockpilot for
+        all linked stockpilot.product.product records.
+        Sends the current quantity for each variant to Stockpilot.
         """
-        res = super().write(vals)
-        if any(field in vals for field in ["qty_available", "default_code"]):
-            config = self.env["stockpilot.configuration"].get_config()
-            if config:
-                self.env["stockpilot.inventory"].with_context(
-                    stockpilot_config=config
-                )._trigger_stock_update(self)
+        for product in self.stockpilot_ids:
+            connection = product.stockpilot_configuration_id._get_connection()
+            product_data = {
+                "id": product.stockpilot_id,
+                "quantity": product.product_product_id.qty_available,
+            }
+            connection._execute_post_request("inventory/update", product_data)
+
+
+class StockPilotProductProduct(models.Model):
+    _name = "stockpilot.product.product"
+
+    stockpilot_configuration_id = fields.Many2one("stockpilot.configuration")
+    product_product_id = fields.Many2one("product.product")
+    stockpilot_id = fields.Char(string="Stockpilot Product ID", copy=False)
+
+    def create(self, vals):
+        """
+        Override create to also create the variant in Stockpilot asynchronously.
+
+        Args:
+            vals (dict): Values for the new record.
+        Returns:
+            recordset: Created record(s).
+        """
+        res = super().create(vals)
+        res.with_delay()._push_stockpilot_variant()
         return res
+
+    def _push_stockpilot_variant(self):
+        """
+        Create this product variant in Stockpilot via API if not already present.
+        Ensures a Stockpilot product template exists and then creates
+        the variant (inventory item).
+        Updates the stockpilot_id field with the returned item ID from Stockpilot.
+        """
+        spt = self.product_product_id.product_tmpl_id.stockpilot_ids.filtered(
+            lambda sp: sp.stockpilot_configuration_id
+            == self.stockpilot_configuration_id
+        )
+        if not spt:
+            spt = (
+                self.env["stockpilot.product.template"]
+                .with_context({"skip_delay": True})
+                .create(
+                    {
+                        "product_tmpl_id": self.product_product_id.product_tmpl_id.id,
+                        "stockpilot_configuration_id": self.stockpilot_configuration_id.id,
+                    }
+                )
+            )
+
+        product_data = {
+            "item_name": self.product_product_id.name,
+            "product_id": spt.stockpilot_id,  # Get this from stockpilot product template
+            "sku": self.product_product_id.default_code or self.product_product_id.name,
+            "barcode": self.product_product_id.barcode
+            or str(self.product_product_id.id),
+            "condition": "NEW",
+            "loc": "NVT",
+        }
+        connection = self.stockpilot_configuration_id._get_connection()
+        response = connection._execute_post_request("inventory/create", product_data)
+        self.stockpilot_id = response.get("item_id")

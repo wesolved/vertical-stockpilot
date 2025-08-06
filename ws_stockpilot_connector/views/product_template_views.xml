@@ -1,5 +1,5 @@
 <odoo>
-    <record id="product_template_tree_view" model="ir.ui.view">
+    <!-- <record id="product_template_tree_view" model="ir.ui.view">
         <field name="model">product.template</field>
         <field name="inherit_id" ref="product.product_template_tree_view" />
         <field name="arch" type="xml">
@@ -9,7 +9,7 @@
                 <field name="stockpilot_config_id" />
             </field>
         </field>
-    </record>
+    </record> -->
 
     <record id="action_export_to_stockpilot_template" model="ir.actions.server">
         <field name="name">Export to Stockpilot</field>

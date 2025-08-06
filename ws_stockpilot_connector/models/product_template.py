@@ -1,79 +1,74 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-import logging
-
-from odoo import fields, models
-
-_logger = logging.getLogger(__name__)
+from odoo import _, fields, models
+from odoo.exceptions import UserError
 
 
 class ProductTemplate(models.Model):
     _inherit = "product.template"
 
+    stockpilot_ids = fields.One2many(
+        "stockpilot.product.template", "product_tmpl_id", copy=False
+    )
+
+    def _create_stockpilot_product(self):
+        """
+        Schedule the creation of Stockpilot products for each product template in the recordset.
+        """
+        for product in self:
+            product.with_delay()._push_stockpilot_product()
+
+
+class StockPilotProductTemplate(models.Model):
+    _name = "stockpilot.product.template"
+
+    product_tmpl_id = fields.Many2one("product.template")
+    stockpilot_configuration_id = fields.Many2one("stockpilot.configuration")
     stockpilot_id = fields.Char(string="Stockpilot Product ID", copy=False)
-    exported_to_stockpilot = fields.Boolean(
-        string="Exported to Stockpilot",
-        compute="_compute_exported_to_stockpilot",
-        store=True,
-    )
-    stockpilot_config_id = fields.Many2one(
-        "stockpilot.configuration",
-        string="Stockpilot Configuration",
-        help="Configuration used to export this product to Stockpilot",
-        copy=False,
-    )
 
-    def _export_product_template(self, product_tmpl):
-        config = self.env["stockpilot.configuration"].get_config()
-        if not config:
-            _logger.error("No Stockpilot configuration found")
-            return False
+    def _push_stockpilot_inventory(self):
+        """
+        Execute an API call to Stockpilot to create this product template.
+        Raises a UserError if no brand is defined on the product.
+        Updates the stockpilot_id field with the returned product ID from Stockpilot.
+        """
+        if not self.product_tmpl_id.product_brand_id:
+            raise UserError(_("No brand defined on the product"))
 
-        payload = {
-            "title": product_tmpl.name,
-            "description": product_tmpl.description or "",
-            "sku": product_tmpl.default_code or f"TEMPLATE-{product_tmpl.id}",
-            "barcode": product_tmpl.barcode or "N/A",
-            "barcode_type": "EAN",
-            "condition": "NEW",
-            "vat_class": "standard_rate",
-            "is_active": product_tmpl.active,
-            "brand": (
-                product_tmpl.product_brand_id.name
-                if product_tmpl.product_brand_id
-                else "Brandless"
-            ),
-            "category": (
-                product_tmpl.categ_id.name if product_tmpl.categ_id else "Uncategorized"
-            ),
-            "image": (
-                product_tmpl.image_1920.decode("utf-8")
-                if product_tmpl.image_1920
-                else None
-            ),
+        brand_id = self.product_tmpl_id.product_brand_id.with_context(
+            {"skip_delay": True}
+        )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
+        category_id = self.product_tmpl_id.categ_id.with_context(
+            {"skip_delay": True}
+        )._get_or_create_stockpilot_category(self.stockpilot_configuration_id)
+
+        product_data = {
+            "title": self.product_tmpl_id.name,
+            "description": self.product_tmpl_id.description
+            or self.product_tmpl_id.name,
+            "is_active": self.product_tmpl_id.active,
+            "brand": brand_id.stockpilot_id,
+            "category": category_id.stockpilot_id,
         }
+        connection = self.stockpilot_configuration_id._get_connection()
+        response = connection._execute_post_request("products/create", product_data)
+        self.stockpilot_id = response.get("product_id")
 
-        _logger.info(f"Exporting product template: {product_tmpl.id}")
-        response = self._call_stockpilot_api(config, "product/create", payload)
+    def create(self, vals):
+        """
+        Override create to also create the product in Stockpilot
+        (asynchronously unless 'skip_delay' is set in context).
 
-        if response and response.get("product_id"):
-            product_tmpl.write(
-                {
-                    "stockpilot_id": response["product_id"],
-                    "stockpilot_config_id": config.id,
-                }
-            )
-            return response["product_id"]
+        Args:
+            vals (dict): Values for the new record.
+        Returns:
+            recordset: Created record(s).
+        """
+        res = super().create(vals)
+        if self.env.context.get("skip_delay"):
+            res._push_stockpilot_inventory()
         else:
-            _logger.error(f"Failed to export product template {product_tmpl.id}")
-            return False
-
-    def _compute_exported_to_stockpilot(self):
-        for template in self:
-            template.exported_to_stockpilot = any(
-                variant.exported_to_stockpilot
-                for variant in template.product_variant_ids
-            )
+            res.with_delay()._push_stockpilot_inventory()
+        return res
