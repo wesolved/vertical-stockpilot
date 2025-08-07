@@ -4,6 +4,7 @@
 
 from odoo import fields, models
 
+
 class StockPilotProductProduct(models.Model):
     _name = "stockpilot.product.product"
 
