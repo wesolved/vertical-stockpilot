@@ -2,8 +2,7 @@
 # @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import _, fields, models
-from odoo.exceptions import UserError
+from odoo import fields, models
 
 
 class StockPilotProductTemplate(models.Model):
@@ -23,7 +22,7 @@ class StockPilotProductTemplate(models.Model):
         if not self.product_tmpl_id.product_brand_id:
             brand_id = self.product_tmpl_id.product_brand_id.with_context(
                 {"skip_delay": True}
-        )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
+            )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
         category_id = self.product_tmpl_id.categ_id.with_context(
             {"skip_delay": True}
         )._get_or_create_stockpilot_category(self.stockpilot_configuration_id)

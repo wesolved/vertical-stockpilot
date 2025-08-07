@@ -13,7 +13,7 @@ class ProductCategory(models.Model):
     )
 
     def _get_or_create_stockpilot_category(self, config_id):
-        """ Create category on stock pilot. """
+        """Create category on stock pilot."""
         self.ensure_one()
         res = self.stockpilot_ids.filtered(
             lambda cat: cat.stockpilot_configuration_id == config_id
