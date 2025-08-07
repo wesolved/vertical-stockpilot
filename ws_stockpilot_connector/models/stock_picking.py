@@ -3,11 +3,13 @@
 # @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import models
+from odoo import fields, models
 
 
 class StockPicking(models.Model):
     _inherit = "stock.picking"
+
+    carrier_tracking_ref = fields.Char()
 
     def _action_done(self):
         """

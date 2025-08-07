@@ -6,9 +6,9 @@
             <xpath expr="//page[@name='general_information']" position="after">
                 <page string="Stockpilot" name="stockpilot">
                     <field name="stockpilot_ids">
-                        <tree>
+                        <list>
                             <field name="stockpilot_configuration_id" />
-                        </tree>
+                        </list>
                         <form>
                             <field name="stockpilot_configuration_id" />
                             <field name="product_product_id" />
