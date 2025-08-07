@@ -31,10 +31,12 @@ class ProductProduct(models.Model):
             except Exception as e:
                 if "Product not found" in str(e):
                     product.unlink()
-                    self.env['stockpilot.product.product'].create({
-                        "stockpilot_configuration_id": configuration_id.id,
-                        "product_product_id": product_id.id
-                    })
+                    self.env["stockpilot.product.product"].create(
+                        {
+                            "stockpilot_configuration_id": configuration_id.id,
+                            "product_product_id": product_id.id,
+                        }
+                    )
 
 
 class StockPilotProductProduct(models.Model):
@@ -79,17 +81,24 @@ class StockPilotProductProduct(models.Model):
                     }
                 )
             )
-        
-        existing_variant = self.env['stockpilot.product.product'].search([
-            ("product_product_id", "=", self.product_product_id.id),
-            ("stockpilot_configuration_id", "=", self.stockpilot_configuration_id.id)
-        ])
+
+        existing_variant = self.env["stockpilot.product.product"].search(
+            [
+                ("product_product_id", "=", self.product_product_id.id),
+                (
+                    "stockpilot_configuration_id",
+                    "=",
+                    self.stockpilot_configuration_id.id,
+                ),
+            ]
+        )
 
         if not existing_variant:
             product_data = {
                 "item_name": self.product_product_id.name,
                 "product_id": spt.stockpilot_id,  # Get this from stockpilot product template
-                "sku": self.product_product_id.default_code or self.product_product_id.name,
+                "sku": self.product_product_id.default_code
+                or self.product_product_id.name,
                 "barcode": self.product_product_id.barcode
                 or str(self.product_product_id.id),
                 "condition": "NEW",
@@ -97,7 +106,9 @@ class StockPilotProductProduct(models.Model):
             }
             connection = self.stockpilot_configuration_id._get_connection()
             try:
-                response = connection._execute_post_request("inventory/create", product_data)
+                response = connection._execute_post_request(
+                    "inventory/create", product_data
+                )
                 self.stockpilot_id = response.get("item_id")
             except Exception as e:
                 if "Invalid pk" in str(e):

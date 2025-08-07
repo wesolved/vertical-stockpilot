@@ -3,7 +3,7 @@
         <field name="name">Fetch Stockpilot Orders</field>
         <field name="model_id" ref="model_stockpilot_configuration" />
         <field name="state">code</field>
-        <field name="code">model.import_orders()</field>
+        <field name="code">model._fetch_orders()</field>
         <field name="interval_type">minutes</field>
         <field name="active">True</field>
     </record>
