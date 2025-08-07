@@ -19,12 +19,22 @@ class ProductProduct(models.Model):
         Sends the current quantity for each variant to Stockpilot.
         """
         for product in self.stockpilot_ids:
-            connection = product.stockpilot_configuration_id._get_connection()
+            configuration_id = product.stockpilot_configuration_id
+            product_id = product.product_product_id
+            connection = configuration_id._get_connection()
             product_data = {
                 "id": product.stockpilot_id,
                 "quantity": product.product_product_id.qty_available,
             }
-            connection._execute_post_request("inventory/update", product_data)
+            try:
+                connection._execute_post_request("inventory/update", product_data)
+            except Exception as e:
+                if "Product not found" in str(e):
+                    product.unlink()
+                    self.env['stockpilot.product.product'].create({
+                        "stockpilot_configuration_id": configuration_id.id,
+                        "product_product_id": product_id.id
+                    })
 
 
 class StockPilotProductProduct(models.Model):
@@ -69,16 +79,29 @@ class StockPilotProductProduct(models.Model):
                     }
                 )
             )
+        
+        existing_variant = self.env['stockpilot.product.product'].search([
+            ("product_product_id", "=", self.product_product_id.id),
+            ("stockpilot_configuration_id", "=", self.stockpilot_configuration_id.id)
+        ])
 
-        product_data = {
-            "item_name": self.product_product_id.name,
-            "product_id": spt.stockpilot_id,  # Get this from stockpilot product template
-            "sku": self.product_product_id.default_code or self.product_product_id.name,
-            "barcode": self.product_product_id.barcode
-            or str(self.product_product_id.id),
-            "condition": "NEW",
-            "loc": "NVT",
-        }
-        connection = self.stockpilot_configuration_id._get_connection()
-        response = connection._execute_post_request("inventory/create", product_data)
-        self.stockpilot_id = response.get("item_id")
+        if not existing_variant:
+            product_data = {
+                "item_name": self.product_product_id.name,
+                "product_id": spt.stockpilot_id,  # Get this from stockpilot product template
+                "sku": self.product_product_id.default_code or self.product_product_id.name,
+                "barcode": self.product_product_id.barcode
+                or str(self.product_product_id.id),
+                "condition": "NEW",
+                "loc": "NVT",
+            }
+            connection = self.stockpilot_configuration_id._get_connection()
+            try:
+                response = connection._execute_post_request("inventory/create", product_data)
+                self.stockpilot_id = response.get("item_id")
+            except Exception as e:
+                if "Invalid pk" in str(e):
+                    spt.unlink()
+                    self._push_stockpilot_variant()
+
+        self.product_product_id._update_stockpilot_stock()
