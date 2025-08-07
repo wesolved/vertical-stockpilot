@@ -4,12 +4,8 @@
         <field name="model_id" ref="model_stockpilot_configuration" />
         <field name="state">code</field>
         <field name="code">model.import_orders()</field>
-        <field name="interval_number">5</field>
         <field name="interval_type">minutes</field>
-        <field name="numbercall">-1</field>
-        <field name="priority">5</field>
         <field name="active">True</field>
-        <field name="doall">True</field>
     </record>
 
 </odoo>
