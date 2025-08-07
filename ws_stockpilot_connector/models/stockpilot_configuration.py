@@ -195,6 +195,11 @@ class StockpilotConfiguration(models.Model):
                 },
             }
 
+    def _fetch_orders(self):
+        """ Method to fetch orders for all stockpilot configurations """
+        for config in self.env["stockpilot.configuration"].search([]):
+            config.with_delay().import_orders()
+
     def import_orders(self):
         """
         Import Stockpilot orders. Can be triggered by a scheduled

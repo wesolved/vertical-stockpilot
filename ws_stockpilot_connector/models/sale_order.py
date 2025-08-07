@@ -47,7 +47,7 @@ class SaleOrder(models.Model):
             connection = self.stockpilot_configuration_id._get_connection()
             res = connection._execute_post_request(
                 "orders/fulfil",
-                {"order_number": self.stockpilot_id, "tracking_code": t_and_t},
+                {"order_pk": self.stockpilot_id, "tracking_code": t_and_t or ""},
             )
             _logger.debug(res)
 
@@ -161,7 +161,7 @@ class SaleOrder(models.Model):
                 }
             )
         connection = stockpilot_configuration_id._get_connection()
-        response = connection.with_delay()._execute_patch_request(
+        response = connection._execute_patch_request(
             f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
         )
         _logger.debug(response)
