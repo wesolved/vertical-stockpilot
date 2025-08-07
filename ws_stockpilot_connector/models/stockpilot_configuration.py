@@ -1,6 +1,4 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 import logging
@@ -196,6 +194,7 @@ class StockpilotConfiguration(models.Model):
             }
 
     def _fetch_orders(self):
+        """Method to fetch orders for all stockpilot configurations"""
         for config in self.env["stockpilot.configuration"].search([]):
             config.with_delay().import_orders()
 

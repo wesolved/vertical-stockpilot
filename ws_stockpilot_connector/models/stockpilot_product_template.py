@@ -1,9 +1,7 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import _, fields, models
-from odoo.exceptions import UserError
+from odoo import fields, models
 
 
 class StockPilotProductTemplate(models.Model):
@@ -19,12 +17,11 @@ class StockPilotProductTemplate(models.Model):
         Raises a UserError if no brand is defined on the product.
         Updates the stockpilot_id field with the returned product ID from Stockpilot.
         """
+        brand_id = None
         if not self.product_tmpl_id.product_brand_id:
-            raise UserError(_("No brand defined on the product"))
-
-        brand_id = self.product_tmpl_id.product_brand_id.with_context(
-            {"skip_delay": True}
-        )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
+            brand_id = self.product_tmpl_id.product_brand_id.with_context(
+                {"skip_delay": True}
+            )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
         category_id = self.product_tmpl_id.categ_id.with_context(
             {"skip_delay": True}
         )._get_or_create_stockpilot_category(self.stockpilot_configuration_id)
@@ -34,7 +31,7 @@ class StockPilotProductTemplate(models.Model):
             "description": self.product_tmpl_id.description
             or self.product_tmpl_id.name,
             "is_active": self.product_tmpl_id.active,
-            "brand": brand_id.stockpilot_id,
+            "brand": brand_id.stockpilot_id or None,
             "category": category_id.stockpilot_id,
         }
         connection = self.stockpilot_configuration_id._get_connection()
