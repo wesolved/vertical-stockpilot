@@ -31,8 +31,8 @@ class StockPilotProductTemplate(models.Model):
             "description": self.product_tmpl_id.description
             or self.product_tmpl_id.name,
             "is_active": self.product_tmpl_id.active,
-            "brand": brand_id.stockpilot_id or None,
-            "category": category_id.stockpilot_id,
+            "brand": brand_id.stockpilot_id if brand_id else None,
+            "category": category_id.stockpilot_id if category_id else None,
         }
         connection = self.stockpilot_configuration_id._get_connection()
         response = connection._execute_post_request("products/create", product_data)
