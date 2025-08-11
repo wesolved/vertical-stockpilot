@@ -6,9 +6,9 @@
             <xpath expr="//page[@name='general_information']" position="after">
                 <page string="Stockpilot" name="stockpilot">
                     <field name="stockpilot_ids">
-                        <list>
+                        <tree>
                             <field name="stockpilot_configuration_id" />
-                        </list>
+                        </tree>
                         <form>
                             <field name="stockpilot_configuration_id" />
                             <field name="product_product_id" />
@@ -23,7 +23,7 @@
         <field name="name">Export to stockpilot</field>
         <field name="model_id" ref="product.model_product_product" />
         <field name="binding_model_id" ref="product.model_product_product" />
-        <field name="binding_view_types">list</field>
+        <field name="binding_view_types">tree</field>
         <field name="state">code</field>
         <field name="code">
 records._update_stockpilot_stock()
