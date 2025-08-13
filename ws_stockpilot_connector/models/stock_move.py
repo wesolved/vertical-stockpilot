@@ -15,9 +15,10 @@ class StockMove(models.Model):
             recordset: Result of the parent _action_done call.
         """
         res = super()._action_done(*args, **kwargs)
-        if self.state == "done" and (
-            not self.picking_id
-            or (self.picking_id and self.picking_id.picking_type_id.code == "incoming")
-        ):
-            self.product_id.with_delay()._update_stockpilot_stock()
+        for record in self:
+            if self.state == "done" and (
+                not record.picking_id
+                or (record.picking_id and record.picking_id.picking_type_id.code == "incoming")
+            ):
+                record.product_id.with_delay()._update_stockpilot_stock()
         return res
