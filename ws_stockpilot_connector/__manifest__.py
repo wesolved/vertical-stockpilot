@@ -13,7 +13,6 @@
         "sale_stock",
         "product_brand",
         "queue_job",
-        "queue_job_batch",
     ],
     "data": [
         "data/ir_cron.xml",

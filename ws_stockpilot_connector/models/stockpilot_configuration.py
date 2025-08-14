@@ -221,11 +221,8 @@ class StockpilotConfiguration(models.Model):
         (Stub implementation)
         """
         products = self.env["product.product"].search([])
-        batch = self.env["queue.job.batch"].get_new_batch("Import products")
         for product in products:
-            self.env["stockpilot.product.product"].with_context(
-                job_batch=batch
-            ).with_delay().create(
+            self.env["stockpilot.product.product"].with_delay().create(
                 {
                     "stockpilot_configuration_id": self.id,
                     "product_product_id": product.id,
