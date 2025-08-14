@@ -1,28 +1,28 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import models
+from odoo import fields, models
 
 
 class StockPicking(models.Model):
     _inherit = "stock.picking"
 
+    carrier_tracking_ref = fields.Char()
+
     def _action_done(self):
         """
-        Overrides the stock.picking `_action_done` method.
+        Overrides the stock.picking `_action_done` method
+        to trigger Stockpilot forwarding for outgoing pickings.
+
+        Returns:
+            recordset: Result of the parent _action_done call.
         """
         res = super()._action_done()
         for picking in self:
             if picking.picking_type_id.code == "outgoing":
                 sale_order = picking.sale_id
-                if sale_order and sale_order.stockpilot_order_id:
-                    for move in picking.move_ids_without_package:
-                        if move.product_id.type == "product":
-                            config = self.env["stockpilot.configuration"].get_config()
-                            if config:
-                                self.env["stockpilot.inventory"].with_context(
-                                    stockpilot_config=config
-                                ).with_delay()._trigger_stock_update(move.product_id)
+                if sale_order and sale_order.stockpilot_id:
+                    sale_order.with_delay()._stockpilot_fulfill(
+                        picking.carrier_tracking_ref
+                    )
         return res

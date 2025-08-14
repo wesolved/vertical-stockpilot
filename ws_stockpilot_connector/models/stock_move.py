@@ -1,6 +1,4 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import models
@@ -9,15 +7,18 @@ from odoo import models
 class StockMove(models.Model):
     _inherit = "stock.move"
 
-    def _action_done(self):
+    def _action_done(self, *args, **kwargs):
         """
         Call parent method and schedule Stockpilot stock update if transfer is done.
+
+        Returns:
+            recordset: Result of the parent _action_done call.
         """
-        res = super()._action_done()
-        if self.state == "done":
-            config = self.env["stockpilot.configuration"].get_config()
-            if config:
-                self.env["stockpilot.inventory"].with_context(
-                    stockpilot_config=config
-                ).with_delay(eta=60)._trigger_stock_update(self.product_id)
+        res = super()._action_done(*args, **kwargs)
+        for record in self:
+            if record.state == "done" and (
+                not record.picking_id
+                or (record.picking_id and record.picking_id.picking_type_id.code == "incoming")
+            ):
+                record.product_id.with_delay()._update_stockpilot_stock()
         return res

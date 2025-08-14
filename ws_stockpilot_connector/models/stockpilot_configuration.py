@@ -1,13 +1,14 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 import logging
 
 import requests
-from odoo import _, api, fields, models
+
+from odoo import _, fields, models
 from odoo.exceptions import UserError
+
+from ..stockpilot_api import StockpilotApi
 
 _logger = logging.getLogger(__name__)
 
@@ -34,18 +35,11 @@ class StockpilotConfiguration(models.Model):
         help="Default tax to apply when no other tax information is available",
     )
 
-    channel_mapping_ids = fields.One2many(
-        "stockpilot.channel.mapping",
-        "config_id",
-        string="Channel Mappings",
-    )
-
     api_client_id = fields.Char(
-        string="API Client ID", default="f9e56e88-14e1-4fc0-8089-04aba8e6088b"
+        string="API Client ID",
     )
     api_client_secret = fields.Char(
         string="API Client Secret",
-        default="4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f",
     )
     base_url = fields.Char(string="Base URL", default="https://api.stockpilot.dev")
     environment = fields.Selection(
@@ -66,20 +60,44 @@ class StockpilotConfiguration(models.Model):
         default=True,
     )
 
-    _sql_constraints = [
-        (
-            "company_uniq",
-            "unique(company_id)",
-            "Only one configuration per company allowed!",
-        ),
-    ]
+    shipping_product = fields.Many2one(
+        "product.product",
+        string="Shipping Product",
+        domain=[("type", "=", "service")],
+        help="Product used for shipping costs in Stockpilot orders",
+    )
+
+    def _get_connection(self):
+        """
+        Get a StockpilotApi connection instance using this configuration's credentials.
+
+        Returns:
+            StockpilotApi: API connection object.
+        """
+        connection = StockpilotApi(
+            self.api_client_id, self.api_client_secret, self.environment
+        )
+
+        return connection
 
     def toggle_active(self):
-        """Standard method name that works with Odoo's built-in archive/unarchive"""
+        """
+        Standard method name that works with Odoo's built-in archive/unarchive.
+        Archives or unarchives the configuration.
+
+        Returns:
+            bool: True if successful.
+        """
         self.write({"active": not self.active})
         return True
 
     def toggle_active_view(self):
+        """
+        Return an action to view Stockpilot configuration records (tree/form view).
+
+        Returns:
+            dict: Odoo action for window view.
+        """
         return {
             "type": "ir.actions.act_window",
             "name": "Configurations",
@@ -94,98 +112,25 @@ class StockpilotConfiguration(models.Model):
         }
 
     def unlink(self):
-        """Prevent deletion of active configurations and clear product IDs"""
+        """
+        Raises a UserError if trying to delete an active configuration.
+
+        Returns:
+            bool: Result of the parent unlink call.
+        """
         active_configs = self.filtered(lambda c: c.active)
         if active_configs:
             raise UserError(
                 _("You cannot delete active configurations! Archive them first.")
             )
 
-        # Clear stockpilot_id and config_id from all products exported with this configuration
-        self._clear_product_stockpilot_ids()
-
         return super().unlink()
 
-    def write(self, vals):
-        """Override write to clear product IDs when archiving"""
-        result = super().write(vals)
-
-        # If configuration is being archived (active set to False), clear product IDs
-        if "active" in vals and not vals["active"]:
-            self._clear_product_stockpilot_ids()
-
-        return result
-
-    def _clear_product_stockpilot_ids(self):
-        """Clear stockpilot_id and config_id from products exported with this configuration"""
-        for config in self:
-            # Clear from product templates
-            product_templates = self.env["product.template"].search(
-                [("stockpilot_config_id", "=", config.id)]
-            )
-            if product_templates:
-                product_templates.write(
-                    {
-                        "stockpilot_id": False,
-                        "stockpilot_config_id": False,
-                        "exported_to_stockpilot": False,
-                    }
-                )
-                _logger.info(
-                    f"Cleared stockpilot IDs from {len(product_templates)} "
-                    f"product templates for config {config.id}"
-                )
-
-            # Clear from product variants
-            product_variants = self.env["product.product"].search(
-                [("stockpilot_config_id", "=", config.id)]
-            )
-            if product_variants:
-                product_variants.write(
-                    {
-                        "stockpilot_id": False,
-                        "stockpilot_config_id": False,
-                        "exported_to_stockpilot": False,
-                    }
-                )
-                _logger.info(
-                    f"Cleared stockpilot IDs from {len(product_variants)} "
-                    f"product variants for config {config.id}"
-                )
-
-    @api.model
-    def _get_default_config(self):
-        """Get or create default configuration for current company"""
-        company_id = self.env.company.id
-        config = self.search([("company_id", "=", company_id)], limit=1)
-        if not config:
-            config = self.create(
-                {
-                    "company_id": company_id,
-                    "api_client_id": "f9e56e88-14e1-4fc0-8089-04aba8e6088b",
-                    "api_client_secret": (
-                        "4c2145b40980fd2005f80bf97776b6e63600587d0c0cbe404fade80027bb9a1f"
-                    ),
-                    "base_url": "https://api.stockpilot.dev",
-                    "environment": "test",
-                }
-            )
-        return config
-
-    def _get_config_action(self):
-        """Return action to open the configuration form"""
-        config = self._get_default_config()
-        return {
-            "type": "ir.actions.act_window",
-            "res_model": self._name,
-            "view_mode": "form",
-            "res_id": config.id,
-            "target": "current",
-            "context": {"form_view_initial_mode": "edit"},
-        }
-
     def _verify_credentials(self):
-        """Check if API credentials and base URL are valid."""
+        """
+        Check if API credentials and base URL are valid.
+        Raises a UserError if any credentials are missing or invalid.
+        """
         self.ensure_one()
         if not all([self.api_client_id, self.api_client_secret, self.base_url]):
             raise UserError(_("All API credentials must be configured"))
@@ -193,17 +138,16 @@ class StockpilotConfiguration(models.Model):
             raise UserError(_("Base URL must start with http:// or https://"))
 
     def _test_api_connectivity(self):
-        """Connecting to Stockpilot API"""
+        """
+        Test connectivity to the Stockpilot API using current credentials.
+
+        Returns:
+            tuple: (bool success, str message)
+        """
         try:
-            response = requests.get(
-                "%s/inventory" % self.base_url.rstrip("/"),
-                headers={
-                    "X-CLIENT-ID": self.api_client_id,
-                    "X-CLIENT-SECRET": self.api_client_secret,
-                },
-                params={"page": 1, "page_size": 100},
-                timeout=10,
-            )
+            connection = self._get_connection()
+            params = {"page": 1, "page_size": 100}
+            response = connection._execute_get_request("inventory", params)
             return response.status_code == 200, (
                 _("Connection successful")
                 if response.status_code == 200
@@ -218,6 +162,9 @@ class StockpilotConfiguration(models.Model):
         """
         Tests the API connection and shows a notification with the result.
         Triggered by a button click in the UI.
+
+        Returns:
+            dict: Odoo client action for notification.
         """
         self.ensure_one()
         try:
@@ -246,117 +193,43 @@ class StockpilotConfiguration(models.Model):
                 },
             }
 
-    @api.model
-    def get_config(self, company_id=None):
-        """Get configuration for current or specified company"""
-        if company_id is None:
-            company_id = self.env.company.id
-        return self.search([("company_id", "=", company_id)], limit=1)
+    def _fetch_orders(self):
+        """Method to fetch orders for all stockpilot configurations"""
+        for config in self.env["stockpilot.configuration"].search([]):
+            config.with_delay().import_orders()
 
     def import_orders(self):
-        """Button action to import orders from Stockpilot with detailed logging"""
+        """
+        Import Stockpilot orders. Can be triggered by a scheduled
+        action or a manual button press.
+        Fetches open orders from Stockpilot and creates corresponding sale.order records.
+        """
         self.ensure_one()
-        try:
-            _logger.info("Starting order import from Stockpilot")
-
-            # Get the sync model
-            sync_model = self.env["stockpilot.sync"]
-
-            # Execute the import
-            result = sync_model.with_delay()._fetch_stockpilot_orders()
-
-            if not result:
-                _logger.error("Order import returned False/None - possible failure")
-
-            _logger.info("Orders imported successfully")
-        except Exception as e:
-            _logger.error(_("Failed to import orders: %s") % str(e), exc_info=True)
-
-    def import_stock(self):
-        """Button action to import products from Stockpilot to Odoo without notifications"""
-        self.ensure_one()
-        try:
-            # Get inventory model
-            inventory_model = self.env["stockpilot.inventory"]
-
-            # Execute the import
-            result = (
-                inventory_model.with_context(stockpilot_config=self)
-                .with_delay()
-                .import_stockpilot_products()
-            )
-
-            if isinstance(result, dict):
-                success_count = result.get("created", 0) + result.get("updated", 0)
-                fail_count = result.get("failed", 0)
-                _logger.info(
-                    "Import: %d products (%d created, %d updated, %d failed)",
-                    success_count + fail_count,
-                    result.get("created", 0),
-                    result.get("updated", 0),
-                    fail_count,
-                )
-            else:
-                _logger.warning(
-                    "Import completed with unexpected results: %s", str(result)
-                )
-                fail_count = 1
-
-            return True
-
-        except Exception as e:
-            _logger.error("Product import failed: %s", str(e), exc_info=True)
-            return False
+        connection = self._get_connection()
+        params = {"status": "open", "page": 1, "page_size": 100}
+        response = connection._execute_get_request("orders", params)
+        if response.status_code != 200:
+            raise UserError(_("Fetching stockpilot orders failed"))
+        orders = response.json().get("results", [])
+        for order in orders:
+            self.env["sale.order"]._import_stockpilot_order(order, self)
+        return
 
     def export_products(self):
-        """Button action to create batch export job for products to Stockpilot"""
-        self.ensure_one()
-        try:
-            # Create a new OCA job batch
-            export_time = fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            batch_export_name = _("Batch Export - %s") % export_time
-            job_batch = self.env["queue.job.batch"].get_new_batch(batch_export_name)
-            batch_export = self.env["stockpilot.batch.export"].create(
+        """
+        Button action to create batch export job for products to Stockpilot.
+        (Stub implementation)
+        """
+        products = self.env["product.product"].search([])
+        batch = self.env["queue.job.batch"].get_new_batch("Import products")
+        for product in products:
+            self.env["stockpilot.product.product"].with_context(
+                job_batch=batch
+            ).with_delay().create(
                 {
-                    "name": batch_export_name,
-                    "config_id": self.id,
-                    "job_batch_id": job_batch.id,
+                    "stockpilot_configuration_id": self.id,
+                    "product_product_id": product.id,
                 }
             )
-
-            message = _("Created batch export job: %s") % batch_export.name
-            _logger.info(message)
-
-            # Start the batch export
-            batch_export.action_start_export()
-
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Batch Export Started"),
-                    "message": _(
-                        "Batch export job created successfully. "
-                        "Check the batch exports menu for progress."
-                    ),
-                    "type": "success",
-                    "sticky": False,
-                },
-            }
-
-        except Exception as e:
-            error_message = _("Failed to create batch export: %s") % str(e)
-            _logger.error(
-                error_message,
-                exc_info=True,
-            )
-            return {
-                "type": "ir.actions.client",
-                "tag": "display_notification",
-                "params": {
-                    "title": _("Error"),
-                    "message": error_message,
-                    "type": "danger",
-                    "sticky": True,
-                },
-            }
+        self.ensure_one()
+        return
