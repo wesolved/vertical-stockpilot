@@ -16,7 +16,7 @@ class StockMove(models.Model):
         """
         res = super()._action_done(*args, **kwargs)
         for record in self:
-            if self.state == "done" and (
+            if record.state == "done" and (
                 not record.picking_id
                 or (record.picking_id and record.picking_id.picking_type_id.code == "incoming")
             ):
