@@ -1,5 +1,7 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_stockpilot_configuration_user,access.stockpilot.configuration,model_stockpilot_configuration,base.group_user,1,1,1,0
 access_stockpilot_configuration_manager,stockpilot.configuration.manager,model_stockpilot_configuration,base.group_system,1,1,1,1
-access_stockpilot_batch_export_user,access.stockpilot.batch.export,model_stockpilot_batch_export,base.group_user,1,1,1,0
-access_stockpilot_batch_export_manager,stockpilot.batch.export.manager,model_stockpilot_batch_export,base.group_system,1,1,1,1
+access_stockpilot_product_product_user,access.stockpilot.product.product,model_stockpilot_product_product,base.group_user,1,1,1,1
+access_stockpilot_product_template_user,access.stockpilot.product.template,model_stockpilot_product_template,base.group_user,1,1,1,1
+access_stockpilot_product_brand_user,access.stockpilot.product.brand,model_stockpilot_product_brand,base.group_user,1,1,1,1
+access_stockpilot_product_category_user,access.stockpilot.product.category,model_stockpilot_product_category,base.group_user,1,1,1,1

@@ -1,9 +1,9 @@
 <odoo>
     <record id="ir_cron_fetch_stockpilot_orders" model="ir.cron">
         <field name="name">Fetch Stockpilot Orders</field>
-        <field name="model_id" ref="model_stockpilot_sync" />
+        <field name="model_id" ref="model_stockpilot_configuration" />
         <field name="state">code</field>
-        <field name="code">model.with_delay()._fetch_stockpilot_orders()</field>
+        <field name="code">model._fetch_orders()</field>
         <field name="interval_number">5</field>
         <field name="interval_type">minutes</field>
         <field name="numbercall">-1</field>

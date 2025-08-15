@@ -8,7 +8,6 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-data/
 env/
 bin/
 build/
@@ -85,21 +84,3 @@ id_rsa
 # Jetbrains IDEs
 .idea/
 .fleet/
-
-# Project configuration
-/parts/*
-!/parts/custom/
-!/parts/external/
-
-# Do not ignore data folders of modules
-!/parts/custom/*/data/
-!/parts/external/*/data/
-
-# Do not ignore lib folders of modules
-!/parts/custom/*/lib/
-
-# Ignore buildout cache
-installed.cfg
-
-# Ignore mr.developer cache
-.mr.developer.cfg

@@ -50,7 +50,6 @@ class StockPilotProductProduct(models.Model):
         existing_variant = self.env["stockpilot.product.product"].search(
             [
                 ("product_product_id", "=", self.product_product_id.id),
-                ("stockpilot_id", "!=", False),
                 (
                     "stockpilot_configuration_id",
                     "=",
@@ -70,7 +69,6 @@ class StockPilotProductProduct(models.Model):
                 "condition": "NEW",
                 "loc": "NVT",
             }
-            _logger.info(product_data)
             connection = self.stockpilot_configuration_id._get_connection()
             try:
                 response = connection._execute_post_request(
