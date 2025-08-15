@@ -1,9 +1,8 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
-
+import logging
 from odoo import fields, models
-
+_logger = logging.getLogger(__name__)
 
 class StockPilotProductProduct(models.Model):
     _name = "stockpilot.product.product"
@@ -75,10 +74,13 @@ class StockPilotProductProduct(models.Model):
                 response = connection._execute_post_request(
                     "inventory/create", product_data
                 )
+                _logger.info(response)
                 self.stockpilot_id = response.get("item_id")
             except Exception as e:
+                _logger.info(str(e))
                 if "Invalid pk" in str(e):
                     spt.unlink()
-                    self._push_stockpilot_variant()
-
+                    self.with_context({"skip_delay": True})._push_stockpilot_variant()
+                else:
+                    raise UserError(str(e))
         self.product_product_id._update_stockpilot_stock()

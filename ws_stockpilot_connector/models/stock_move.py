@@ -1,6 +1,4 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
-# @author Insaf Amrani <insaf.amrani.boukhobza@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import models
@@ -17,9 +15,10 @@ class StockMove(models.Model):
             recordset: Result of the parent _action_done call.
         """
         res = super()._action_done(*args, **kwargs)
-        if self.state == "done" and (
-            not self.picking_id
-            or (self.picking_id and self.picking_id.picking_type_id.code == "incoming")
-        ):
-            self.product_id.with_delay()._update_stockpilot_stock()
+        for record in self:
+            if record.state == "done" and (
+                not record.picking_id
+                or (record.picking_id and record.picking_id.picking_type_id.code == "incoming")
+            ):
+                record.product_id.with_delay()._update_stockpilot_stock()
         return res

@@ -1,5 +1,4 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
-# @author Miro Tasevski <miro.tasevski@wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 from odoo import fields, models
@@ -32,8 +31,8 @@ class StockPilotProductTemplate(models.Model):
             "description": self.product_tmpl_id.description
             or self.product_tmpl_id.name,
             "is_active": self.product_tmpl_id.active,
-            "brand": brand_id.stockpilot_id or None,
-            "category": category_id.stockpilot_id,
+            "brand": brand_id.stockpilot_id if brand_id else None,
+            "category": category_id.stockpilot_id if category_id else None,
         }
         connection = self.stockpilot_configuration_id._get_connection()
         response = connection._execute_post_request("products/create", product_data)
