@@ -56,6 +56,7 @@ class StockPilotProductProduct(models.Model):
                     "=",
                     self.stockpilot_configuration_id.id,
                 ),
+                ("stockpilot_id", "!=", False)
             ]
         )
 
