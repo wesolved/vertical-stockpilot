@@ -34,21 +34,24 @@ class SaleOrder(models.Model):
             connection = self.stockpilot_configuration_id._get_connection()
             res = connection._execute_patch_request(
                 f"orders/{self.stockpilot_id}/update-forwarding",
-                {"register_order_id": self.id, "source": "api"},
+                {"register_order_id": str(self.id), "source": "api"},
             )
-            _logger.debug(res)
+            _logger.info(res)
 
     def _stockpilot_fulfill(self, t_and_t):
         """
         Trigger a fulfill update for this order in Stockpilot.
         """
         if self.stockpilot_configuration_id:
+            if not t_and_t:
+                t_and_t = self.env['stock.picking'].search([("origin", "=", self.name), ("carrier_tracking_ref", "!=", False)], limit=1).carrier_tracking_ref
             connection = self.stockpilot_configuration_id._get_connection()
             res = connection._execute_post_request(
                 "orders/fulfil",
-                {"order_pk": self.stockpilot_id, "tracking_code": t_and_t or ""},
+                {"order_pk": self.stockpilot_id, "tracking_code": t_and_t or "", "carrier_name": self.stockpilot_configuration_id.carrier_method},
             )
-            _logger.debug(res)
+            _logger.info("=============================================================")
+            _logger.info(res)
 
     def _import_stockpilot_order(self, order, stockpilot_configuration_id):
         """
@@ -61,6 +64,7 @@ class SaleOrder(models.Model):
         Returns:
             None
         """
+        _logger.info(order)
         order_id = order.get("id")
         order_number = order.get("order_number")
         order_date = order.get("created_at")
@@ -141,7 +145,9 @@ class SaleOrder(models.Model):
                 "stockpilot_configuration_id": stockpilot_configuration_id.id,
             }
         )
+        _logger.info(order)
         for line in order.get("line_items"):
+            _logger.info(line)
             product = self.env["stockpilot.product.product"].search(
                 [("stockpilot_id", "=", line.get("product_id"))]
             )
@@ -156,13 +162,22 @@ class SaleOrder(models.Model):
                     "name": line.get("sales_channel_title"),
                     "product_id": product.product_product_id.id,
                     "product_uom_qty": line.get("quantity"),
-                    "price_unit": line.get("retail_price"),
+                    "price_unit": float(line.get("retail_price")) / (100 + float(line.get("vat_rate"))) * 100,
                 }
             )
+        _logger.info(line.get("shipping_total"))
+        if line.get("shipping_total"):
+            self.env["sale.order.line"].create({
+                "order_id": order_id.id,
+                "name": "Shipping",
+                "price_unit": float(line.get("shipping_total")) / (100 + float(order.get("vat_rate"))) * 100,
+                "product_id": 128255,
+                "product_uom_qty": 1,
+            })
         connection = stockpilot_configuration_id._get_connection()
-        response = connection._execute_patch_request(
-            f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
-        )
-        _logger.debug(response)
+        #response = connection._execute_patch_request(
+        #    f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
+        #)
+        #_logger.debug(response)
         order_id.action_confirm()
-        self._stockpilot_forwarding()
+        order_id.with_delay()._stockpilot_forwarding()

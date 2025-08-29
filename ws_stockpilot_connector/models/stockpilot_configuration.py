@@ -22,6 +22,8 @@ class StockpilotConfiguration(models.Model):
         required=True,
     )
 
+    stock_calculator = fields.Selection([("qty_available", "QTY Available"), ("virtual_available", "Virtual available"), ("free_qty", "Free quantity"), ("incoming_qty", "Incoming quantity"), ("outgoing_qty", "Outgoing quantity")], string="Stock Calculator", default="qty_available")
+    carrier_method = fields.Char()
     create_missing_taxes = fields.Boolean(
         string="Create Missing Taxes",
         default=True,
@@ -206,14 +208,16 @@ class StockpilotConfiguration(models.Model):
         """
         self.ensure_one()
         connection = self._get_connection()
-        params = {"status": "open", "page": 1, "page_size": 100}
+        params = {"forwarded": "false", "page": 1, "page_size": 100}
         response = connection._execute_get_request("orders", params)
         if response.status_code != 200:
             raise UserError(_("Fetching stockpilot orders failed"))
         orders = response.json().get("results", [])
+        _logger.info(response)
+        _logger.info(orders)
         for order in orders:
-            self.env["sale.order"]._import_stockpilot_order(order, self)
-        return
+            self.env["sale.order"].with_delay()._import_stockpilot_order(order, self)
+        return response
 
     def export_products(self):
         """

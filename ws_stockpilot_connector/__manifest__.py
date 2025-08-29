@@ -14,7 +14,7 @@
     "depends": [
         "sale_management",
         "sale_stock",
-        "product_brand",
+        "atharva_theme_base",
         "queue_job",
         "queue_job_batch",
     ],
