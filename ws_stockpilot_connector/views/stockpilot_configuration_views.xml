@@ -36,6 +36,8 @@
                             <field name="base_url" />
                             <field name="environment" />
                             <field name="shipping_product" />
+                            <field name="stock_calculator" />
+                            <field name="carrier_method" />
                             <field name="active" invisible="1" />
                         </group>
                     </sheet>

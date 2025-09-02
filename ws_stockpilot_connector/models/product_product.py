@@ -23,7 +23,7 @@ class ProductProduct(models.Model):
             connection = configuration_id._get_connection()
             product_data = {
                 "id": product.stockpilot_id,
-                "quantity": product.product_product_id.qty_available,
+                "quantity": product_id._calculate_stock(configuration_id),
             }
             try:
                 connection._execute_post_request("inventory/update", product_data)
@@ -36,3 +36,16 @@ class ProductProduct(models.Model):
                             "product_product_id": product_id.id,
                         }
                     )
+
+    def _calculate_stock(self, stockpilot_configuration):
+        if stockpilot_configuration.stock_calculator == "qty_available":
+            return self.qty_available
+        elif stockpilot_configuration.stock_calculator == "virtual_available":
+            return self.virtual_available
+        elif stockpilot_configuration.stock_calculator == "free_qty":
+            return self.free_qty
+        elif stockpilot_configuration.stock_calculator == "incoming_qty":
+            return self.incoming_qty
+        elif stockpilot_configuration.stock_calculator == "outgoing_qty":
+            return self.outgoing_qty
+        return 0
