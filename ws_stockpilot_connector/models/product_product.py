@@ -49,4 +49,3 @@ class ProductProduct(models.Model):
         elif stockpilot_configuration.stock_calculator == "outgoing_qty":
             return self.outgoing_qty
         return 0
-    

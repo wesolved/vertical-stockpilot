@@ -19,13 +19,6 @@ class StockPicking(models.Model):
             recordset: Result of the parent _action_done call.
         """
         return
-        for picking in self:
-            if picking.picking_type_id.code == "outgoing":
-                sale_order = picking.sale_id
-                if sale_order and sale_order.stockpilot_id:
-                    sale_order.with_delay()._stockpilot_fulfill(
-                        picking.carrier_tracking_ref
-                    )
 
     def write(self, vals_list):
         """

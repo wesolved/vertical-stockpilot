@@ -44,13 +44,29 @@ class SaleOrder(models.Model):
         """
         if self.stockpilot_configuration_id:
             if not t_and_t:
-                t_and_t = self.env['stock.picking'].search([("origin", "=", self.name), ("carrier_tracking_ref", "!=", False)], limit=1).carrier_tracking_ref
+                t_and_t = (
+                    self.env["stock.picking"]
+                    .search(
+                        [
+                            ("origin", "=", self.name),
+                            ("carrier_tracking_ref", "!=", False),
+                        ],
+                        limit=1,
+                    )
+                    .carrier_tracking_ref
+                )
             connection = self.stockpilot_configuration_id._get_connection()
             res = connection._execute_post_request(
                 "orders/fulfil",
-                {"order_pk": self.stockpilot_id, "tracking_code": t_and_t or "", "carrier_name": self.stockpilot_configuration_id.carrier_method},
+                {
+                    "order_pk": self.stockpilot_id,
+                    "tracking_code": t_and_t or "",
+                    "carrier_name": self.stockpilot_configuration_id.carrier_method,
+                },
             )
-            _logger.info("=============================================================")
+            _logger.info(
+                "============================================================="
+            )
             _logger.info(res)
 
     def _import_stockpilot_order(self, order, stockpilot_configuration_id):
@@ -159,25 +175,35 @@ class SaleOrder(models.Model):
                 {
                     "order_id": order_id.id,
                     "stockpilot_id": line.get("id"),
-                    "name": line.get("sales_channel_title") if line.get("sales_channel_title") else product.product_product_id[0].name,
+                    "name": (
+                        line.get("sales_channel_title")
+                        if line.get("sales_channel_title")
+                        else product.product_product_id[0].name
+                    ),
                     "product_id": product.product_product_id[0].id,
                     "product_uom_qty": line.get("quantity"),
-                    "price_unit": float(line.get("retail_price")) / (100 + float(line.get("vat_rate"))) * 100,
+                    "price_unit": float(line.get("retail_price"))
+                    / (100 + float(line.get("vat_rate")))
+                    * 100,
                 }
             )
         _logger.info(line.get("shipping_total"))
         if line.get("shipping_total"):
-            self.env["sale.order.line"].create({
-                "order_id": order_id.id,
-                "name": "Shipping",
-                "price_unit": float(line.get("shipping_total")) / (100 + float(order.get("vat_rate"))) * 100,
-                "product_id": 128255,
-                "product_uom_qty": 1,
-            })
-        connection = stockpilot_configuration_id._get_connection()
-        #response = connection._execute_patch_request(
+            self.env["sale.order.line"].create(
+                {
+                    "order_id": order_id.id,
+                    "name": "Shipping",
+                    "price_unit": float(line.get("shipping_total"))
+                    / (100 + float(order.get("vat_rate")))
+                    * 100,
+                    "product_id": 128255,
+                    "product_uom_qty": 1,
+                }
+            )
+        stockpilot_configuration_id._get_connection()
+        # response = connection._execute_patch_request(
         #    f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
-        #)
-        #_logger.debug(response)
+        # )
+        # _logger.debug(response)
         order_id.action_confirm()
         order_id.with_delay()._stockpilot_forwarding()
