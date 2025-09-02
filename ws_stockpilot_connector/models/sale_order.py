@@ -151,7 +151,7 @@ class SaleOrder(models.Model):
             product = self.env["stockpilot.product.product"].search(
                 [("stockpilot_id", "=", line.get("product_id"))]
             )
-            if not product:
+            if not product or not line.get("product_id"):
                 raise UserError(
                     _("Product %s does not exist" % line.get("sales_channel_title"))
                 )
@@ -159,8 +159,8 @@ class SaleOrder(models.Model):
                 {
                     "order_id": order_id.id,
                     "stockpilot_id": line.get("id"),
-                    "name": line.get("sales_channel_title"),
-                    "product_id": product.product_product_id.id,
+                    "name": line.get("sales_channel_title") if line.get("sales_channel_title") else product.product_product_id[0].name,
+                    "product_id": product.product_product_id[0].id,
                     "product_uom_qty": line.get("quantity"),
                     "price_unit": float(line.get("retail_price")) / (100 + float(line.get("vat_rate"))) * 100,
                 }
