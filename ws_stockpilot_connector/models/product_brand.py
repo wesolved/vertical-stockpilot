@@ -5,7 +5,7 @@ from odoo import fields, models
 
 
 class ProductBrand(models.Model):
-    _inherit = "as.product.brand"
+    _inherit = "product.brand"
 
     stockpilot_ids = fields.One2many("stockpilot.product.brand", "brand_id", copy=False)
 
