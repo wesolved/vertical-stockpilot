@@ -159,10 +159,25 @@ class SaleOrder(models.Model):
                     "price_unit": line.get("retail_price"),
                 }
             )
-        connection = stockpilot_configuration_id._get_connection()
-        response = connection._execute_patch_request(
-            f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
-        )
-        _logger.debug(response)
+
+        _logger.info(line.get("shipping_total"))
+        if order.get("shipping_total"):
+            self.env["sale.order.line"].create(
+                {
+                    "order_id": order_id.id,
+                    "name": "Shipping",
+                    "price_unit": float(line.get("shipping_total"))
+                    / (100 + float(order.get("vat_rate")))
+                    * 100,
+                    "product_id": 128255,
+                    "product_uom_qty": 1,
+                }
+            )
+        stockpilot_configuration_id._get_connection()
+        # response = connection._execute_patch_request(
+        #    f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
+        # )
+        # _logger.debug(response)
+
         order_id.action_confirm()
         self._stockpilot_forwarding()
