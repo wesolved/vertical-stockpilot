@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    stockpilot_id = fields.Integer()
+    stockpilot_id = fields.Integer(copy=False)
     stockpilot_configuration_id = fields.Many2one(
         "stockpilot.configuration", readonly=True
     )
