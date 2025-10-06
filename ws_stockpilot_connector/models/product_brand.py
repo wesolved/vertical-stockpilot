@@ -11,6 +11,8 @@ class ProductBrand(models.Model):
 
     def _get_or_create_stockpilot_brand(self, config_id):
         """Create stockpilot brand"""
+        if not self:
+            return False
         self.ensure_one()
         res = self.stockpilot_ids.filtered(
             lambda brand: brand.stockpilot_configuration_id == config_id

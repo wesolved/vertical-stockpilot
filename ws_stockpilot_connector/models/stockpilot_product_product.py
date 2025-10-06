@@ -1,8 +1,12 @@
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 import logging
+
 from odoo import fields, models
+from odoo.exceptions import UserError
+
 _logger = logging.getLogger(__name__)
+
 
 class StockPilotProductProduct(models.Model):
     _name = "stockpilot.product.product"
@@ -50,12 +54,12 @@ class StockPilotProductProduct(models.Model):
         existing_variant = self.env["stockpilot.product.product"].search(
             [
                 ("product_product_id", "=", self.product_product_id.id),
-                ("stockpilot_id", "!=", False),
                 (
                     "stockpilot_configuration_id",
                     "=",
                     self.stockpilot_configuration_id.id,
                 ),
+                ("stockpilot_id", "!=", False),
             ]
         )
 
@@ -70,7 +74,6 @@ class StockPilotProductProduct(models.Model):
                 "condition": "NEW",
                 "loc": "NVT",
             }
-            _logger.info(product_data)
             connection = self.stockpilot_configuration_id._get_connection()
             try:
                 response = connection._execute_post_request(

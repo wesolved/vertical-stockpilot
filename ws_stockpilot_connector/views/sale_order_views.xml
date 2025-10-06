@@ -5,6 +5,7 @@
             <field name="arch" type="xml">
                 <field name="name" position="after">
                     <field name="stockpilot_id" />
+                    <field name="stockpilot_error" />
                 </field>
             </field>
         </record>

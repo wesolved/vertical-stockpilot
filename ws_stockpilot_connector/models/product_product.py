@@ -11,6 +11,29 @@ class ProductProduct(models.Model):
         "stockpilot.product.product", "product_product_id", copy=False
     )
 
+    def _push_stockpilot_product(self, configuration_id=False):
+        """
+        Push the product to Stockpilot and create a stockpilot.product.product record.
+        If the product already exists in Stockpilot, it will not be created again.
+        """
+        if not configuration_id:
+            configurations = self.env["stockpilot.configuration"].search([])
+        else:
+            configurations = self.env["stockpilot.configuration"].browse(configuration_id)
+        for product in self:
+            for configuration in configurations:
+                if product.stockpilot_ids.filtered(
+                    lambda r: r.stockpilot_configuration_id == configuration
+                ):
+                    product._update_stockpilot_stock()
+                else:
+                    self.env["stockpilot.product.product"].with_delay().create(
+                        {
+                            "stockpilot_configuration_id": configuration.id,
+                            "product_product_id": product.id,
+                        }
+                    )
+        
     def _update_stockpilot_stock(self):
         """
         Trigger an inventory update towards Stockpilot for
@@ -23,7 +46,7 @@ class ProductProduct(models.Model):
             connection = configuration_id._get_connection()
             product_data = {
                 "id": product.stockpilot_id,
-                "quantity": product.product_product_id.qty_available,
+                "quantity": product_id._calculate_stock(configuration_id),
             }
             try:
                 connection._execute_post_request("inventory/update", product_data)
@@ -36,3 +59,16 @@ class ProductProduct(models.Model):
                             "product_product_id": product_id.id,
                         }
                     )
+
+    def _calculate_stock(self, stockpilot_configuration):
+        if stockpilot_configuration.stock_calculator == "qty_available":
+            return self.qty_available
+        elif stockpilot_configuration.stock_calculator == "virtual_available":
+            return self.virtual_available
+        elif stockpilot_configuration.stock_calculator == "free_qty":
+            return self.free_qty
+        elif stockpilot_configuration.stock_calculator == "incoming_qty":
+            return self.incoming_qty
+        elif stockpilot_configuration.stock_calculator == "outgoing_qty":
+            return self.outgoing_qty
+        return 0
