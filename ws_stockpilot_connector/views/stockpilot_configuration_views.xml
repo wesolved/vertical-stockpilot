@@ -38,6 +38,7 @@
                             <field name="shipping_product" />
                             <field name="discount_product" />
                             <field name="stock_calculator" />
+                            <field name="crm_team_id" />
                             <field name="carrier_method" />
                             <field name="crm_team_id" />
                             <field name="auto_confirm_orders" />
