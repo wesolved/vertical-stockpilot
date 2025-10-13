@@ -16,12 +16,6 @@ class StockMove(models.Model):
         """
         res = super()._action_done(*args, **kwargs)
         for record in self:
-            if record.state == "done" and (
-                not record.picking_id
-                or (
-                    record.picking_id
-                    and record.picking_id.picking_type_id.code == "incoming"
-                )
-            ):
+            if record.state == "done":
                 record.product_id.with_delay()._update_stockpilot_stock()
         return res

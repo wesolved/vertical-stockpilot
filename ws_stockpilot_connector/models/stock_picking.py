@@ -18,7 +18,6 @@ class StockPicking(models.Model):
         Returns:
             recordset: Result of the parent _action_done call.
         """
-        return
         for picking in self:
             if picking.picking_type_id.code == "outgoing":
                 sale_order = picking.sale_id

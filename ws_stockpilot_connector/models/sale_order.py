@@ -16,6 +16,7 @@ class SaleOrder(models.Model):
     stockpilot_configuration_id = fields.Many2one(
         "stockpilot.configuration", readonly=True
     )
+    stockpilot_error = fields.Boolean()
 
     _sql_constraints = [
         (
@@ -80,9 +81,8 @@ class SaleOrder(models.Model):
         Returns:
             None
         """
-        _logger.info(order)
         order_id = order.get("id")
-        order_number = order.get("order_number")
+        order_number = order.get("channel_order_number") or order.get("order_number")
         order_date = order.get("created_at")
         if self.search([("stockpilot_id", "=", order_id)]):
             _logger.debug(f"Stockpilot order {order_id} already exists")
@@ -124,7 +124,7 @@ class SaleOrder(models.Model):
             "phone": order.get("customer_phone"),
         }
         partner_id = self.env["res.partner"]._get_stockpilot_partner(partner)
-        if company_id:
+        if company_id and partner_id != company_id:
             partner_id.parent_id = company_id.id
 
         billing_partner = {
@@ -154,6 +154,8 @@ class SaleOrder(models.Model):
             {
                 "name": order_number,
                 "partner_id": partner_id.id,
+                "client_order_ref": order_number,
+                "team_id": stockpilot_configuration_id.crm_team_id.id,
                 "date_order": datetime.datetime.fromisoformat(order_date).strftime(
                     "%Y-%m-%d %H:%M:%S"
                 ),
@@ -162,15 +164,14 @@ class SaleOrder(models.Model):
             }
         )
         _logger.info(order)
+        missing_product = False
         for line in order.get("line_items"):
             _logger.info(line)
             product = self.env["stockpilot.product.product"].search(
                 [("stockpilot_id", "=", line.get("product_id"))]
             )
             if not product or not line.get("product_id"):
-                raise UserError(
-                    _("Product %s does not exist" % line.get("sales_channel_title"))
-                )
+                missing_product = True
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
@@ -188,15 +189,27 @@ class SaleOrder(models.Model):
                 }
             )
         _logger.info(line.get("shipping_total"))
-        if line.get("shipping_total"):
+        if order.get("shipping_total"):
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
                     "name": "Shipping",
-                    "price_unit": float(line.get("shipping_total"))
-                    / (100 + float(order.get("vat_rate")))
+                    "price_unit": float(order.get("shipping_total", 0))
+                    / (100 + float(order.get("vat_rate", 0)))
                     * 100,
-                    "product_id": 128255,
+                    "product_id": stockpilot_configuration_id.shipping_product.id,
+                    "product_uom_qty": 1,
+                }
+            )
+        if order.get("discount_total"):
+            self.env["sale.order.line"].create(
+                {
+                    "order_id": order_id.id,
+                    "name": "Discount",
+                    "price_unit": (float(order.get("discount_total", 0))
+                    / (100 + float(order.get("vat_rate", 0)))) * -1
+                    * 100,
+                    "product_id": stockpilot_configuration_id.discount_product.id,
                     "product_uom_qty": 1,
                 }
             )
@@ -205,5 +218,12 @@ class SaleOrder(models.Model):
         #    f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
         # )
         # _logger.debug(response)
-        order_id.action_confirm()
+        if missing_product:
+            order_id.message_post(
+                body=_(
+                    "One or more products in this order could not be found in Odoo and have been skipped. Please check this order yourself."))
+            order_id.stockpilot_error = True
+
+        if self.stockpilot_configuration_id.auto_confirm_orders and not missing_product:
+            order_id.action_confirm()
         order_id.with_delay()._stockpilot_forwarding()

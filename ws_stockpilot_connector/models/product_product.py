@@ -11,6 +11,29 @@ class ProductProduct(models.Model):
         "stockpilot.product.product", "product_product_id", copy=False
     )
 
+    def _push_stockpilot_product(self, configuration_id=False):
+        """
+        Push the product to Stockpilot and create a stockpilot.product.product record.
+        If the product already exists in Stockpilot, it will not be created again.
+        """
+        if not configuration_id:
+            configurations = self.env["stockpilot.configuration"].search([])
+        else:
+            configurations = self.env["stockpilot.configuration"].browse(configuration_id)
+        for product in self:
+            for configuration in configurations:
+                if product.stockpilot_ids.filtered(
+                    lambda r: r.stockpilot_configuration_id == configuration
+                ):
+                    product._update_stockpilot_stock()
+                else:
+                    self.env["stockpilot.product.product"].with_delay().create(
+                        {
+                            "stockpilot_configuration_id": configuration.id,
+                            "product_product_id": product.id,
+                        }
+                    )
+        
     def _update_stockpilot_stock(self):
         """
         Trigger an inventory update towards Stockpilot for

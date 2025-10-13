@@ -33,6 +33,8 @@ class StockpilotConfiguration(models.Model):
         string="Stock Calculator",
         default="qty_available",
     )
+    crm_team_id = fields.Many2one("crm.team")
+    auto_confirm_orders = fields.Boolean()
     carrier_method = fields.Char()
     create_missing_taxes = fields.Boolean(
         string="Create Missing Taxes",
@@ -77,6 +79,12 @@ class StockpilotConfiguration(models.Model):
         string="Shipping Product",
         domain=[("type", "=", "service")],
         help="Product used for shipping costs in Stockpilot orders",
+    )
+    discount_product = fields.Many2one(
+        "product.product",
+        string="Discount Product",
+        domain=[("type", "=", "service")],
+        help="Product used for discounts on stockpilot",
     )
 
     def _get_connection(self):
