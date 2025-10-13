@@ -16,7 +16,7 @@ class SaleOrder(models.Model):
     stockpilot_configuration_id = fields.Many2one(
         "stockpilot.configuration", readonly=True
     )
-    stockpilot_error = fields.Boolean()
+    stockpilot_error = fields.Boolean(string="Data mismatch", copy=False)
 
     _sql_constraints = [
         (
@@ -201,12 +201,12 @@ class SaleOrder(models.Model):
                     "product_uom_qty": 1,
                 }
             )
-        if order.get("discount_total"):
+        if order.get("discount"):
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
                     "name": "Discount",
-                    "price_unit": (float(order.get("discount_total", 0))
+                    "price_unit": (float(order.get("discount", 0))
                     / (100 + float(order.get("vat_rate", 0)))) * -1
                     * 100,
                     "product_id": stockpilot_configuration_id.discount_product.id,
@@ -214,10 +214,6 @@ class SaleOrder(models.Model):
                 }
             )
         stockpilot_configuration_id._get_connection()
-        # response = connection._execute_patch_request(
-        #    f"orders/{order_id.stockpilot_id}/update-status", {"status": "pending"}
-        # )
-        # _logger.debug(response)
         if missing_product:
             order_id.message_post(
                 body=_(
