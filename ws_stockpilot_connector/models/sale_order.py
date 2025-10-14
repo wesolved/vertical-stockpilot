@@ -195,6 +195,7 @@ class SaleOrder(models.Model):
             )
             if not product or not line.get("product_id"):
                 missing_product = True
+                continue
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
