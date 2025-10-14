@@ -13,7 +13,7 @@
     ],
     "data": [
         "views/stockpilot_configuration_views.xml",
-        "security/ir_model_access.csv",
+        "security/ir.model.access.csv",
     ],
     "images": ["static/description/icon.png"],
     "installable": True,
