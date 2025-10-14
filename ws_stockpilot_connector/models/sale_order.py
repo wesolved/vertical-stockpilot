@@ -249,6 +249,6 @@ class SaleOrder(models.Model):
             )
             order_id.stockpilot_error = True
 
-        if self.stockpilot_configuration_id.auto_confirm_orders and not missing_product:
+        if stockpilot_configuration_id.auto_confirm_orders and not missing_product:
             order_id.action_confirm()
         order_id.with_delay()._stockpilot_forwarding()
