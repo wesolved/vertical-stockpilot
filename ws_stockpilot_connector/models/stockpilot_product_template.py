@@ -47,7 +47,9 @@ class StockPilotProductTemplate(models.Model):
                 "image_file": self.product_tmpl_id.image_1920.decode("utf-8"),
             }
             connection = self.stockpilot_configuration_id._get_connection()
-            connection._execute_post_request(f"products/{self.stockpilot_id}/set-image", image_data)
+            connection._execute_post_request(
+                f"products/{self.stockpilot_id}/set-image", image_data
+            )
 
     def create(self, vals):
         """

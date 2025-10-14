@@ -1,5 +1,5 @@
 <odoo>
-    <record id="product_product_tree_view" model="ir.ui.view">
+    <record id="product_product_list_view" model="ir.ui.view">
         <field name="model">product.product</field>
         <field name="inherit_id" ref="product.product_normal_form_view" />
         <field name="arch" type="xml">

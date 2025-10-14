@@ -41,6 +41,7 @@ class StockpilotConfiguration(models.Model):
         default=True,
         help="Automatically create tax records when they don't exist",
     )
+    default_warehouse_id = fields.Many2one("stock.warehouse")
 
     default_tax_id = fields.Many2one(
         "account.tax",

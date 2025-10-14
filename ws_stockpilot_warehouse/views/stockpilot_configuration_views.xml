@@ -1,0 +1,16 @@
+<odoo>
+    <record id="view_stockpilot_configuration_form" model="ir.ui.view">
+        <field name="model">stockpilot.configuration</field>
+        <field name="inherit_id" ref="ws_stockpilot_connector.view_stockpilot_configuration_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='active']" position="after">
+                <field name="country_warehouse_ids">
+                    <list editable="bottom">
+                        <field name="country_id" />
+                        <field name="warehouse_id" />
+                    </list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -19,7 +19,9 @@ class ProductProduct(models.Model):
         if not configuration_id:
             configurations = self.env["stockpilot.configuration"].search([])
         else:
-            configurations = self.env["stockpilot.configuration"].browse(configuration_id)
+            configurations = self.env["stockpilot.configuration"].browse(
+                configuration_id
+            )
         for product in self:
             for configuration in configurations:
                 if product.stockpilot_ids.filtered(
@@ -33,7 +35,7 @@ class ProductProduct(models.Model):
                             "product_product_id": product.id,
                         }
                     )
-        
+
     def _update_stockpilot_stock(self):
         """
         Trigger an inventory update towards Stockpilot for
