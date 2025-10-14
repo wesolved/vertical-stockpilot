@@ -15,25 +15,12 @@
         <field name="name">Export to Stockpilot</field>
         <field name="model_id" ref="product.model_product_template" />
         <field name="binding_model_id" ref="product.model_product_template" />
-        <field name="binding_view_types">list</field>
+        <field name="binding_view_types">list,form</field>
         <field name="state">code</field>
         <field name="code">
 if records:
-    config = env["stockpilot.configuration"].get_config()
-    if not config:
-        raise UserError("No Stockpilot configuration found")
-    batch_export_name = "Batch Export - %s" % str(len(records))
-    job_batch = env["queue.job.batch"].get_new_batch(batch_export_name)
-    batch_export = env["stockpilot.batch.export"].create({
-        "name": batch_export_name,
-        "config_id": config.id,
-        "job_batch_id": job_batch.id,
-    })
-    # Export each template directly (not via variant)
-    for template in records:
-        # Try using the batch object directly in context
-        batch_export.with_context(job_batch=job_batch).with_delay()._export_single_product(template.id)
-    job_batch.enqueue()
+    for variant in records:
+        variant.with_delay()._push_stockpilot_product()
         </field>
     </record>
 </odoo>

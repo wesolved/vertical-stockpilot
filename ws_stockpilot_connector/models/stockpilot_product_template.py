@@ -17,11 +17,6 @@ class StockPilotProductTemplate(models.Model):
         Raises a UserError if no brand is defined on the product.
         Updates the stockpilot_id field with the returned product ID from Stockpilot.
         """
-        brand_id = None
-        if not self.product_tmpl_id.product_brand_id:
-            brand_id = self.product_tmpl_id.product_brand_id.with_context(
-                {"skip_delay": True}
-            )._get_or_create_stockpilot_brand(self.stockpilot_configuration_id)
         category_id = self.product_tmpl_id.categ_id.with_context(
             {"skip_delay": True}
         )._get_or_create_stockpilot_category(self.stockpilot_configuration_id)
@@ -37,6 +32,19 @@ class StockPilotProductTemplate(models.Model):
         connection = self.stockpilot_configuration_id._get_connection()
         response = connection._execute_post_request("products/create", product_data)
         self.stockpilot_id = response.get("product_id")
+
+    def _push_image(self):
+        """
+        Push the product image to Stockpilot if it exists.
+        """
+        if self.product_tmpl_id.image_1920 and self.stockpilot_id:
+            image_data = {
+                "image_file": self.product_tmpl_id.image_1920.decode("utf-8"),
+            }
+            connection = self.stockpilot_configuration_id._get_connection()
+            connection._execute_post_request(
+                f"products/{self.stockpilot_id}/set-image", image_data
+            )
 
     def create(self, vals):
         """

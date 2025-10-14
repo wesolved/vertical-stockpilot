@@ -22,13 +22,26 @@ class StockpilotConfiguration(models.Model):
         required=True,
     )
 
-    stock_calculator = fields.Selection([("qty_available", "QTY Available"), ("virtual_available", "Virtual available"), ("free_qty", "Free quantity"), ("incoming_qty", "Incoming quantity"), ("outgoing_qty", "Outgoing quantity")], string="Stock Calculator", default="qty_available")
+    stock_calculator = fields.Selection(
+        [
+            ("qty_available", "QTY Available"),
+            ("virtual_available", "Virtual available"),
+            ("free_qty", "Free quantity"),
+            ("incoming_qty", "Incoming quantity"),
+            ("outgoing_qty", "Outgoing quantity"),
+        ],
+        string="Stock Calculator",
+        default="qty_available",
+    )
+    crm_team_id = fields.Many2one("crm.team")
+    auto_confirm_orders = fields.Boolean()
     carrier_method = fields.Char()
     create_missing_taxes = fields.Boolean(
         string="Create Missing Taxes",
         default=True,
         help="Automatically create tax records when they don't exist",
     )
+    default_warehouse_id = fields.Many2one("stock.warehouse")
 
     default_tax_id = fields.Many2one(
         "account.tax",
@@ -67,6 +80,12 @@ class StockpilotConfiguration(models.Model):
         string="Shipping Product",
         domain=[("type", "=", "service")],
         help="Product used for shipping costs in Stockpilot orders",
+    )
+    discount_product = fields.Many2one(
+        "product.product",
+        string="Discount Product",
+        domain=[("type", "=", "service")],
+        help="Product used for discounts on stockpilot",
     )
 
     def _get_connection(self):
