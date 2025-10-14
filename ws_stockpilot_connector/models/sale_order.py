@@ -171,7 +171,7 @@ class SaleOrder(models.Model):
             {
                 "name": order_number,
                 "partner_id": partner_id.id,
-                "shipping_partner_id": partner_id.id,
+                "partner_shipping_id": partner_id.id,
                 "partner_invoice_id": billing_partner.id,
                 "client_order_ref": order_number,
                 "team_id": stockpilot_configuration_id.crm_team_id.id,
@@ -249,6 +249,6 @@ class SaleOrder(models.Model):
             )
             order_id.stockpilot_error = True
 
-        if self.stockpilot_configuration_id.auto_confirm_orders and not missing_product:
+        if stockpilot_configuration_id.auto_confirm_orders and not missing_product:
             order_id.action_confirm()
         order_id.with_delay()._stockpilot_forwarding()
