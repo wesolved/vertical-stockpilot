@@ -4,7 +4,6 @@ import datetime
 import logging
 
 from odoo import _, fields, models
-from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -39,6 +38,9 @@ class SaleOrder(models.Model):
             )
             _logger.info(res)
 
+    def _get_warehouse(self, stockpilot_configuration_id, country_code):
+        return stockpilot_configuration_id.default_warehouse_id
+
     def _stockpilot_fulfill(self, t_and_t):
         """
         Trigger a fulfill update for this order in Stockpilot.
@@ -69,6 +71,19 @@ class SaleOrder(models.Model):
                 "============================================================="
             )
             _logger.info(res)
+
+    def override_order(self, order, order_info):
+        """
+        Placeholder method for custom order overrides.
+        Can be extended in other modules to modify the order after creation.
+
+        Args:
+            order (recordset): The created sale.order record.
+
+        Returns:
+            recordset: The potentially modified sale.order record.
+        """
+        return order
 
     def _import_stockpilot_order(self, order, stockpilot_configuration_id):
         """
@@ -148,12 +163,16 @@ class SaleOrder(models.Model):
                 parent_id = company_id
             else:
                 parent_id = partner_id
-            self.env["res.partner"]._get_stockpilot_partner(billing_partner, parent_id)
+            billing_partner = self.env["res.partner"]._get_stockpilot_partner(
+                billing_partner, parent_id
+            )
 
         order_id = self.env["sale.order"].create(
             {
                 "name": order_number,
                 "partner_id": partner_id.id,
+                "shipping_partner_id": partner_id.id,
+                "partner_invoice_id": billing_partner.id,
                 "client_order_ref": order_number,
                 "team_id": stockpilot_configuration_id.crm_team_id.id,
                 "date_order": datetime.datetime.fromisoformat(order_date).strftime(
@@ -161,9 +180,13 @@ class SaleOrder(models.Model):
                 ),
                 "stockpilot_id": order_id,
                 "stockpilot_configuration_id": stockpilot_configuration_id.id,
+                "warehouse_id": self._get_warehouse(
+                    stockpilot_configuration_id, order.get("shipment_country")
+                ).id,
             }
         )
-        _logger.info(order)
+        order_id = self.override_order(order_id, order)
+
         missing_product = False
         for line in order.get("line_items"):
             _logger.info(line)
@@ -206,8 +229,11 @@ class SaleOrder(models.Model):
                 {
                     "order_id": order_id.id,
                     "name": "Discount",
-                    "price_unit": (float(order.get("discount", 0))
-                    / (100 + float(order.get("vat_rate", 0)))) * -1
+                    "price_unit": (
+                        float(order.get("discount", 0))
+                        / (100 + float(order.get("vat_rate", 0)))
+                    )
+                    * -1
                     * 100,
                     "product_id": stockpilot_configuration_id.discount_product.id,
                     "product_uom_qty": 1,
@@ -217,7 +243,9 @@ class SaleOrder(models.Model):
         if missing_product:
             order_id.message_post(
                 body=_(
-                    "One or more products in this order could not be found in Odoo and have been skipped. Please check this order yourself."))
+                    "One or more products in this order could not be found in Odoo and have been skipped. Please check this order yourself."
+                )
+            )
             order_id.stockpilot_error = True
 
         if self.stockpilot_configuration_id.auto_confirm_orders and not missing_product:
