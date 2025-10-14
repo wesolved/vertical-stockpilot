@@ -171,7 +171,7 @@ class SaleOrder(models.Model):
             {
                 "name": order_number,
                 "partner_id": partner_id.id,
-                "shipping_partner_id": partner_id.id,
+                "partner_shipping_id": partner_id.id,
                 "partner_invoice_id": billing_partner.id,
                 "client_order_ref": order_number,
                 "team_id": stockpilot_configuration_id.crm_team_id.id,
