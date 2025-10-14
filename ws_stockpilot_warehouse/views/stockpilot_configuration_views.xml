@@ -6,8 +6,8 @@
             <xpath expr="//field[@name='active']" position="after">
                 <field name="country_warehouse_ids">
                     <tree editable="bottom">
-                        <field name="category_id" />
-                        <field name="stockpilot_channel_id" />
+                        <field name="country_id" />
+                        <field name="warehouse_id" />
                     </tree>
                 </field>
             </xpath>
