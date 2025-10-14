@@ -11,7 +11,6 @@
     "depends": [
         "sale_management",
         "sale_stock",
-        "product_brand",
         "queue_job",
     ],
     "data": [
