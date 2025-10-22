@@ -166,6 +166,8 @@ class SaleOrder(models.Model):
             billing_partner = self.env["res.partner"]._get_stockpilot_partner(
                 billing_partner, parent_id
             )
+        else:
+            billing_partner = partner_id
 
         order_id = self.env["sale.order"].create(
             {
