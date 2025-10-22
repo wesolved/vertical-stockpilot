@@ -19,8 +19,8 @@
         <field name="state">code</field>
         <field name="code">
 if records:
-    for variant in records:
-        variant.with_delay()._push_stockpilot_product()
+    for product in records:
+        product.product_variant_id.with_delay()._push_stockpilot_product()
         </field>
     </record>
 </odoo>
