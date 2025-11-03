@@ -7,6 +7,7 @@ from odoo import models
 class ResPartner(models.Model):
     _inherit = "res.partner"
 
+
     def _get_stockpilot_partner(self, partner, parent_partner=False):
         """
         Get or create a contact/partner for a Stockpilot order.
@@ -33,12 +34,8 @@ class ResPartner(models.Model):
         if parent_partner:
             partner_domain.append(("parent_id", "=", parent_partner.id))
             partner_obj["parent_id"] = parent_partner.id
-        if partner.get("email"):
-            partner_id = self.env["res.partner"].search(
-                [("email", "=", partner.get("email"))], limit=1
-            )
-        else:
-            partner_id = self.env["res.partner"].search(partner_domain)
+            
+        partner_id = self.env["res.partner"].search(partner_domain)
 
         if not partner_id:
             partner_id = self.env["res.partner"].create(partner_obj)

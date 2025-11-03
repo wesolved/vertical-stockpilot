@@ -100,7 +100,7 @@ class SaleOrder(models.Model):
         order_number = order.get("channel_order_number") or order.get("order_number")
         order_date = order.get("created_at")
         if self.search([("stockpilot_id", "=", order_id)]):
-            _logger.debug(f"Stockpilot order {order_id} already exists")
+            _logger.info(f"Stockpilot order {order_id} already exists")
             return
 
         order = order.get("order_details")
@@ -168,7 +168,7 @@ class SaleOrder(models.Model):
             )
         else:
             billing_partner = partner_id
-
+        warehouse_id = self._get_warehouse(stockpilot_configuration_id, order.get("shipment_country")).id
         order_id = self.env["sale.order"].create(
             {
                 "name": order_number,
@@ -182,9 +182,7 @@ class SaleOrder(models.Model):
                 ),
                 "stockpilot_id": order_id,
                 "stockpilot_configuration_id": stockpilot_configuration_id.id,
-                "warehouse_id": self._get_warehouse(
-                    stockpilot_configuration_id, order.get("shipment_country")
-                ).id,
+                "warehouse_id": warehouse_id,
             }
         )
         order_id = self.override_order(order_id, order)
@@ -242,6 +240,8 @@ class SaleOrder(models.Model):
                     "product_uom_qty": 1,
                 }
             )
+        _logger.info(warehouse_id)
+        order_id.warehouse_id = warehouse_id
         stockpilot_configuration_id._get_connection()
         if missing_product:
             order_id.message_post(
