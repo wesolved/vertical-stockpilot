@@ -23,7 +23,7 @@ class StockPicking(models.Model):
                 sale_order = picking.sale_id
                 if sale_order and sale_order.stockpilot_id:
                     sale_order.with_delay()._stockpilot_fulfill(
-                        picking.carrier_tracking_ref
+                        picking
                     )
 
     def write(self, vals_list):
@@ -47,6 +47,6 @@ class StockPicking(models.Model):
                     and "carrier_tracking_ref" in vals_list
                 ):
                     sale_order.with_delay()._stockpilot_fulfill(
-                        picking.carrier_tracking_ref
+                        picking
                     )
         return res

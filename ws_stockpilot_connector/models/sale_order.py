@@ -41,10 +41,15 @@ class SaleOrder(models.Model):
     def _get_warehouse(self, stockpilot_configuration_id, country_code):
         return stockpilot_configuration_id.default_warehouse_id
 
-    def _stockpilot_fulfill(self, t_and_t):
+    def _stockpilot_fulfill(self, picking):
         """
         Trigger a fulfill update for this order in Stockpilot.
         """
+        t_and_t = picking.carrier_tracking_ref
+        if hasattr(picking, "sendcloud_shipping_method_checkout_name"):
+            carrier_name = picking.sendcloud_shipping_method_checkout_name
+        else:
+            carrier_name = self.stockpilot_configuration_id.carrier_method
         if self.stockpilot_configuration_id:
             if not t_and_t:
                 t_and_t = (
@@ -64,7 +69,7 @@ class SaleOrder(models.Model):
                 {
                     "order_pk": self.stockpilot_id,
                     "tracking_code": t_and_t or "",
-                    "carrier_name": self.stockpilot_configuration_id.carrier_method,
+                    "carrier_name": carrier_name or "",
                 },
             )
             _logger.info(
