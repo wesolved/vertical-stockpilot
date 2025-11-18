@@ -40,7 +40,6 @@
                             <field name="stock_calculator" />
                             <field name="crm_team_id" />
                             <field name="carrier_method" />
-                            <field name="crm_team_id" />
                             <field name="auto_confirm_orders" />
                             <field name="default_warehouse_id" />
                             <field name="active" invisible="1" />
