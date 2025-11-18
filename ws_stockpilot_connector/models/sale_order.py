@@ -185,6 +185,7 @@ class SaleOrder(models.Model):
                 "warehouse_id": self._get_warehouse(
                     stockpilot_configuration_id, order.get("shipment_country")
                 ).id,
+                "currency_id": self.env['res.currency'].search([("code", "=", order.get("currency_code"))], limit=1).id,
             }
         )
         order_id = self.override_order(order_id, order)
