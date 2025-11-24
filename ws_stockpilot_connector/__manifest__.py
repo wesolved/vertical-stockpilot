@@ -15,6 +15,7 @@
     ],
     "data": [
         "data/ir_cron.xml",
+        "data/product_pricelist.xml",
         "security/group.xml",
         "security/security.xml",
         "security/ir.model.access.csv",

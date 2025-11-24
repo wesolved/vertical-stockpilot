@@ -35,6 +35,7 @@ class StockpilotConfiguration(models.Model):
     )
     crm_team_id = fields.Many2one("crm.team")
     auto_confirm_orders = fields.Boolean()
+    pricelist_id = fields.Many2one("product.pricelist", default=lambda self: self.env.ref("ws_stockpilot_connector.stockpilot_pricelist").id)
     carrier_method = fields.Char()
     create_missing_taxes = fields.Boolean(
         string="Create Missing Taxes",
@@ -227,7 +228,7 @@ class StockpilotConfiguration(models.Model):
         """
         self.ensure_one()
         connection = self._get_connection()
-        params = {"forwarded": "false", "page": 1, "page_size": 100}
+        params = {"forwarded": "false", "page": 1, "page_size": 100, "status": "open,pending"}
         response = connection._execute_get_request("orders", params)
         if response.status_code != 200:
             raise UserError(_("Fetching stockpilot orders failed"))

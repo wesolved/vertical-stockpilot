@@ -50,6 +50,9 @@ class StockPilotProductProduct(models.Model):
                     }
                 )
             )
+            
+        if len(spt) > 1:
+            spt = spt[0]
 
         existing_variant = self.env["stockpilot.product.product"].search(
             [

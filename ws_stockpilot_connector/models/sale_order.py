@@ -192,6 +192,8 @@ class SaleOrder(models.Model):
         )
         order_id = self.override_order(order_id, order)
 
+        order_id.pricelist_id = stockpilot_configuration_id.pricelist_id.id
+
         missing_product = False
         for line in order.get("line_items"):
             _logger.info(line)

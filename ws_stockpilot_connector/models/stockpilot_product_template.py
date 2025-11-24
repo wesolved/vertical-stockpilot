@@ -20,6 +20,9 @@ class StockPilotProductTemplate(models.Model):
         category_id = self.product_tmpl_id.categ_id.with_context(
             {"skip_delay": True}
         )._get_or_create_stockpilot_category(self.stockpilot_configuration_id)
+        
+        if len(category_id) > 1:
+            category_id = category_id[0]
 
         product_data = {
             "title": self.product_tmpl_id.name,
