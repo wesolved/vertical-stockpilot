@@ -41,6 +41,7 @@
                             <field name="crm_team_id" />
                             <field name="carrier_method" />
                             <field name="auto_confirm_orders" />
+                            <field name="import_on_hold" />
                             <field name="default_warehouse_id" />
                             <field name="active" invisible="1" />
                         </group>

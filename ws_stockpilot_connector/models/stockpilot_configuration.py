@@ -75,6 +75,12 @@ class StockpilotConfiguration(models.Model):
         default=True,
     )
 
+    import_on_hold = fields.Boolean(
+        string="Import On Hold Orders",
+        default=False,
+        help="If enabled, orders marked as 'on hold' in Stockpilot will also be imported as a quotation, orders will be confirmed once they are confirmed through stockpilot.",
+    )
+
     shipping_product = fields.Many2one(
         "product.product",
         string="Shipping Product",
