@@ -99,44 +99,50 @@ class SaleOrder(models.Model):
         order_id = order.get("id")
         order_number = order.get("channel_order_number") or order.get("order_number")
         order_date = order.get("created_at")
+        order_info = order
         if self.search([("stockpilot_id", "=", order_id)]):
             _logger.debug(f"Stockpilot order {order_id} already exists")
             return
 
         order = order.get("order_details")
+
+        def _sp_val(key, default=""):
+            val = order.get(key, default)
+            return default if val is None else val
+
         company_id = False
         if order.get("shipment_company"):
             # First check for parent
             partner = {
-                "name": order.get("shipment_company", ""),
+                "name": _sp_val("shipment_company"),
                 "street": "%s %s %s"
                 % (
-                    order.get("shipment_street", ""),
-                    order.get("shipment_housenumber", ""),
-                    order.get("shipment_suffix", ""),
+                    _sp_val("shipment_street"),
+                    _sp_val("shipment_housenumber"),
+                    _sp_val("shipment_suffix"),
                 ),
-                "zip": order.get("shipment_zipcode", ""),
-                "city": order.get("shipment_city", ""),
-                "country": order.get("shipment_country", ""),
-                "email": order.get("customer_email", ""),
-                "phone": order.get("customer_phone", ""),
+                "zip": _sp_val("shipment_zipcode"),
+                "city": _sp_val("shipment_city"),
+                "country": _sp_val("shipment_country"),
+                "email": _sp_val("customer_email"),
+                "phone": _sp_val("customer_phone"),
             }
             company_id = self.env["res.partner"]._get_stockpilot_partner(partner)
 
         partner = {
             "name": "%s %s"
-            % (order.get("shipment_firstname", ""), order.get("shipment_lastname", "")),
+            % (_sp_val("shipment_firstname"), _sp_val("shipment_lastname")),
             "street": "%s %s %s"
             % (
-                order.get("shipment_street", ""),
-                order.get("shipment_housenumber", ""),
-                order.get("shipment_suffix", ""),
+                _sp_val("shipment_street"),
+                _sp_val("shipment_housenumber"),
+                _sp_val("shipment_suffix"),
             ),
-            "zip": order.get("shipment_zipcode", ""),
-            "city": order.get("shipment_city", ""),
-            "country": order.get("shipment_country", ""),
-            "email": order.get("customer_email", ""),
-            "phone": order.get("customer_phone", ""),
+            "zip": _sp_val("shipment_zipcode"),
+            "city": _sp_val("shipment_city"),
+            "country": _sp_val("shipment_country"),
+            "email": _sp_val("customer_email"),
+            "phone": _sp_val("customer_phone"),
         }
         partner_id = self.env["res.partner"]._get_stockpilot_partner(partner)
         if company_id and partner_id != company_id:
@@ -144,18 +150,18 @@ class SaleOrder(models.Model):
 
         billing_partner = {
             "name": "%s %s"
-            % (order.get("billing_firstname", ""), order.get("billing_lastname", "")),
+            % (_sp_val("billing_firstname"), _sp_val("billing_lastname")),
             "street": "%s %s %s"
             % (
-                order.get("billing_street", ""),
-                order.get("billing_housenumber", ""),
-                order.get("billing_suffix", ""),
+                _sp_val("billing_street"),
+                _sp_val("billing_housenumber"),
+                _sp_val("billing_suffix"),
             ),
-            "zip": order.get("billing_zipcode", ""),
-            "city": order.get("billing_city", ""),
-            "country": order.get("billing_country", ""),
-            "email": order.get("customer_email", ""),
-            "phone": order.get("customer_phone", ""),
+            "zip": _sp_val("billing_zipcode"),
+            "city": _sp_val("billing_city"),
+            "country": _sp_val("billing_country"),
+            "email": _sp_val("customer_email"),
+            "phone": _sp_val("customer_phone"),
         }
 
         if partner != billing_partner:
@@ -188,7 +194,7 @@ class SaleOrder(models.Model):
                 "currency_id": self.env['res.currency'].search([("name", "=", order.get("currency_code"))], limit=1).id,
             }
         )
-        order_id = self.override_order(order_id, order)
+        order_id = self.override_order(order_id, order_info)
 
         missing_product = False
         for line in order.get("line_items"):
@@ -215,7 +221,7 @@ class SaleOrder(models.Model):
                     * 100,
                 }
             )
-        _logger.info(line.get("shipping_total"))
+        _logger.info(order.get("shipping_total"))
         if order.get("shipping_total"):
             self.env["sale.order.line"].create(
                 {
