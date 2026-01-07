@@ -65,6 +65,7 @@ class SaleOrder(models.Model):
                     "order_pk": self.stockpilot_id,
                     "tracking_code": t_and_t or "",
                     "carrier_name": self.stockpilot_configuration_id.carrier_method,
+                    "carrier_code": self.stockpilot_configuration_id.carrier_method
                 },
             )
             _logger.info(
