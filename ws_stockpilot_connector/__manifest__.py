@@ -11,6 +11,7 @@
     "depends": [
         "sale_management",
         "sale_stock",
+        "mrp",
         "queue_job",
         "queue_job_batch",
     ],
