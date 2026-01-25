@@ -35,7 +35,7 @@ class ResPartner(models.Model):
             partner_obj["parent_id"] = parent_partner.id
         if partner.get("email"):
             partner_id = self.env["res.partner"].search(
-                [("email", "=", partner.get("email"))], limit=1
+                [("email", "=", partner.get("email")), ("name", "=", partner.get("name"))], limit=1
             )
         else:
             partner_id = self.env["res.partner"].search(partner_domain)

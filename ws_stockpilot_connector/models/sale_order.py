@@ -250,6 +250,7 @@ class SaleOrder(models.Model):
                     "product_uom_qty": 1,
                 }
             )
+        order_id.message_post(body=_("Customer note: %s") % order.get("customer_note"))
         stockpilot_configuration_id._get_connection()
         if missing_product:
             order_id.message_post(
