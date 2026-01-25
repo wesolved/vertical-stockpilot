@@ -42,5 +42,7 @@ class ResPartner(models.Model):
 
         if not partner_id:
             partner_id = self.env["res.partner"].create(partner_obj)
+        
+        partner_id.write(partner_obj)
 
         return partner_id
