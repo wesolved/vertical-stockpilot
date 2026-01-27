@@ -11,6 +11,12 @@ class ProductProduct(models.Model):
         "stockpilot.product.product", "product_product_id", copy=False
     )
 
+    # def write(self, vals):
+    #     """ If product fields are updated, update stockpilot product """
+    #     res = super().write(vals)
+    #     self._push_stockpilot_product()
+    #     return res
+    
     def _push_stockpilot_product(self, configuration_id=False):
         """
         Push the product to Stockpilot and create a stockpilot.product.product record.

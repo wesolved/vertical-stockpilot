@@ -9,12 +9,10 @@ class SaleOrder(models.Model):
 
     def override_order(self, order, order_info):
         order = super().override_order(order, order_info)
-
-        metadata = (order_info or {}).get("metadata") or {}
-        shipping_title = (
-            ((metadata.get("shippingLines") or [{}])[0].get("node") or {}).get("title")
-            or ""
-        )
+        if not order_info.get("metadata").get("shippingLines"):
+            return order
+            
+        shipping_title = order_info.get("metadata").get("shippingLines")[0].get("method_title")
 
         if not shipping_title:
             return order
