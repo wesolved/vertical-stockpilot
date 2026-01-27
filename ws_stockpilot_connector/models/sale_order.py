@@ -236,6 +236,9 @@ class SaleOrder(models.Model):
                 }
             )
         if order.get("discount"):
+            tax = self.env["account.tax"].search(
+                [("name", "=", order.get("vat_rate"))], limit=1
+            )
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
@@ -248,6 +251,7 @@ class SaleOrder(models.Model):
                     * 100,
                     "product_id": stockpilot_configuration_id.discount_product.id,
                     "product_uom_qty": 1,
+                    "tax_id": [(6, 0, tax.ids)] if tax else [(5, 0, 0)],
                 }
             )
         order_id.message_post(body=_("Customer note: %s") % order.get("customer_note"))
