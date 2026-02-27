@@ -42,7 +42,8 @@ class ResPartner(models.Model):
 
         if not partner_id:
             partner_id = self.env["res.partner"].create(partner_obj)
-        
+        if parent_partner and partner_id.id == parent_partner.id:
+            partner_obj.pop("parent_id", None)
         partner_id.write(partner_obj)
 
         return partner_id
