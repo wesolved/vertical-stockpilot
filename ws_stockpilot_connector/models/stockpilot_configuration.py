@@ -75,6 +75,12 @@ class StockpilotConfiguration(models.Model):
         default=True,
     )
 
+    import_on_hold = fields.Boolean(
+        string="Import On Hold Orders",
+        default=False,
+        help="If enabled, orders marked as 'on hold' in Stockpilot will also be imported as a quotation, orders will be confirmed once they are confirmed through stockpilot.",
+    )
+
     shipping_product = fields.Many2one(
         "product.product",
         string="Shipping Product",
@@ -244,11 +250,8 @@ class StockpilotConfiguration(models.Model):
         (Stub implementation)
         """
         products = self.env["product.product"].search([])
-        batch = self.env["queue.job.batch"].get_new_batch("Import products")
         for product in products:
-            self.env["stockpilot.product.product"].with_context(
-                job_batch=batch
-            ).with_delay().create(
+            self.env["stockpilot.product.product"].with_delay().create(
                 {
                     "stockpilot_configuration_id": self.id,
                     "product_product_id": product.id,

@@ -17,5 +17,7 @@ class StockMove(models.Model):
         res = super()._action_done(*args, **kwargs)
         for record in self:
             if record.state == "done":
-                record.product_id.with_delay()._update_stockpilot_stock()
+                products_to_sync = record.product_id
+                products_to_sync |= record.product_id._stockpilot_get_bom_parent_products()
+                products_to_sync.with_delay()._update_stockpilot_stock()
         return res

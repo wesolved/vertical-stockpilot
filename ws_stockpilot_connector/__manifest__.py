@@ -12,7 +12,6 @@
         "sale_management",
         "sale_stock",
         "queue_job",
-        "queue_job_batch",
     ],
     "data": [
         "data/ir_cron.xml",
