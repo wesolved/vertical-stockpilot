@@ -1,8 +1,0 @@
-<odoo>
-    <data noupdate="1">
-        <record id="stockpilot_connector_group_user" model="res.groups">
-            <field name="name">Stockpilot Connector User</field>
-            <field name="category_id" ref="base.module_category_inventory" />
-        </record>
-    </data>
-</odoo>

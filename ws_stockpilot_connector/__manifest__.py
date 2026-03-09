@@ -15,7 +15,6 @@
     ],
     "data": [
         "data/ir_cron.xml",
-        "security/security.xml",
         "security/ir.model.access.csv",
         "views/stockpilot_configuration_views.xml",
         "views/product_template_views.xml",
