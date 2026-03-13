@@ -1,3 +1,4 @@
+
 # Copyright (C) 2025 WeSolved BV <https://wesolved.com>
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
@@ -6,7 +7,6 @@ from odoo import models
 
 class ResPartner(models.Model):
     _inherit = "res.partner"
-
 
     def _get_stockpilot_partner(self, partner, parent_partner=False):
         """
@@ -34,10 +34,17 @@ class ResPartner(models.Model):
         if parent_partner:
             partner_domain.append(("parent_id", "=", parent_partner.id))
             partner_obj["parent_id"] = parent_partner.id
-            
-        partner_id = self.env["res.partner"].search(partner_domain)
+        if partner.get("email"):
+            partner_id = self.env["res.partner"].search(
+                [("email", "=", partner.get("email")), ("name", "=", partner.get("name"))], limit=1
+            )
+        else:
+            partner_id = self.env["res.partner"].search(partner_domain)
 
         if not partner_id:
             partner_id = self.env["res.partner"].create(partner_obj)
+        if parent_partner and partner_id.id == parent_partner.id:
+            partner_obj.pop("parent_id", None)
+        partner_id.write(partner_obj)
 
         return partner_id

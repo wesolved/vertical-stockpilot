@@ -41,18 +41,14 @@ class SaleOrder(models.Model):
     def _get_warehouse(self, stockpilot_configuration_id, country_code):
         return stockpilot_configuration_id.default_warehouse_id
 
-    def _stockpilot_fulfill(self, picking):
+    def _stockpilot_fulfill(self, t_and_t):
         """
         Trigger a fulfill update for this order in Stockpilot.
         """
-        t_and_t = picking.carrier_tracking_ref
-        if hasattr(picking, "sendcloud_shipping_method_checkout_name"):
-            carrier_name = picking.sendcloud_shipping_method_checkout_name
-        else:
-            carrier_name = self.stockpilot_configuration_id.carrier_method
         if self.stockpilot_configuration_id:
+            tracking = False
             if not t_and_t:
-                t_and_t = (
+                tracking = (
                     self.env["stock.picking"]
                     .search(
                         [
@@ -63,13 +59,17 @@ class SaleOrder(models.Model):
                     )
                     .carrier_tracking_ref
                 )
+            else:
+                tracking = t_and_t.carrier_tracking_ref
+                
             connection = self.stockpilot_configuration_id._get_connection()
             res = connection._execute_post_request(
                 "orders/fulfil",
                 {
                     "order_pk": self.stockpilot_id,
-                    "tracking_code": t_and_t or "",
-                    "carrier_name": carrier_name or "",
+                    "tracking_code": tracking if tracking else "",
+                    "carrier_name": self.stockpilot_configuration_id.carrier_method,
+                    "carrier_code": self.stockpilot_configuration_id.carrier_method
                 },
             )
             _logger.info(
@@ -104,44 +104,52 @@ class SaleOrder(models.Model):
         order_id = order.get("id")
         order_number = order.get("channel_order_number") or order.get("order_number")
         order_date = order.get("created_at")
+        order_info = order
         if self.search([("stockpilot_id", "=", order_id)]):
-            _logger.info(f"Stockpilot order {order_id} already exists")
+            _logger.debug(f"Stockpilot order {order_id} already exists")
             return
 
         order = order.get("order_details")
+
+        def _sp_val(key, default=""):
+            val = order.get(key, default)
+            return default if val is None else val
+
         company_id = False
         if order.get("shipment_company"):
             # First check for parent
             partner = {
-                "name": order.get("shipment_company", ""),
+                "name": _sp_val("shipment_company"),
                 "street": "%s %s %s"
                 % (
-                    order.get("shipment_street", ""),
-                    order.get("shipment_housenumber", ""),
-                    order.get("shipment_suffix", ""),
+                    _sp_val("shipment_street"),
+                    _sp_val("shipment_housenumber"),
+                    _sp_val("shipment_suffix"),
                 ),
-                "zip": order.get("shipment_zipcode", ""),
-                "city": order.get("shipment_city", ""),
-                "country": order.get("shipment_country", ""),
-                "email": order.get("customer_email", ""),
-                "phone": order.get("customer_phone", ""),
+                "street2": _sp_val("billing_address_2"),
+                "zip": _sp_val("shipment_zipcode"),
+                "city": _sp_val("shipment_city"),
+                "country": _sp_val("shipment_country"),
+                "email": _sp_val("customer_email"),
+                "phone": _sp_val("customer_phone"),
             }
             company_id = self.env["res.partner"]._get_stockpilot_partner(partner)
 
         partner = {
             "name": "%s %s"
-            % (order.get("shipment_firstname", ""), order.get("shipment_lastname", "")),
+            % (_sp_val("shipment_firstname"), _sp_val("shipment_lastname")),
             "street": "%s %s %s"
             % (
-                order.get("shipment_street", ""),
-                order.get("shipment_housenumber", ""),
-                order.get("shipment_suffix", ""),
+                _sp_val("shipment_street"),
+                _sp_val("shipment_housenumber"),
+                _sp_val("shipment_suffix"),
             ),
-            "zip": order.get("shipment_zipcode", ""),
-            "city": order.get("shipment_city", ""),
-            "country": order.get("shipment_country", ""),
-            "email": order.get("customer_email", ""),
-            "phone": order.get("customer_phone", ""),
+            "street2": _sp_val("billing_address_2"),
+            "zip": _sp_val("shipment_zipcode"),
+            "city": _sp_val("shipment_city"),
+            "country": _sp_val("shipment_country"),
+            "email": _sp_val("customer_email"),
+            "phone": _sp_val("customer_phone"),
         }
         partner_id = self.env["res.partner"]._get_stockpilot_partner(partner)
         if company_id and partner_id != company_id:
@@ -149,18 +157,19 @@ class SaleOrder(models.Model):
 
         billing_partner = {
             "name": "%s %s"
-            % (order.get("billing_firstname", ""), order.get("billing_lastname", "")),
+            % (_sp_val("billing_firstname"), _sp_val("billing_lastname")),
             "street": "%s %s %s"
             % (
-                order.get("billing_street", ""),
-                order.get("billing_housenumber", ""),
-                order.get("billing_suffix", ""),
+                _sp_val("billing_street"),
+                _sp_val("billing_housenumber"),
+                _sp_val("billing_suffix"),
             ),
-            "zip": order.get("billing_zipcode", ""),
-            "city": order.get("billing_city", ""),
-            "country": order.get("billing_country", ""),
-            "email": order.get("customer_email", ""),
-            "phone": order.get("customer_phone", ""),
+            "street2": _sp_val("billing_address_2"),
+            "zip": _sp_val("billing_zipcode"),
+            "city": _sp_val("billing_city"),
+            "country": _sp_val("billing_country"),
+            "email": _sp_val("customer_email"),
+            "phone": _sp_val("customer_phone"),
         }
 
         if partner != billing_partner:
@@ -173,7 +182,7 @@ class SaleOrder(models.Model):
             )
         else:
             billing_partner = partner_id
-        warehouse_id = self._get_warehouse(stockpilot_configuration_id, order.get("shipment_country")).id
+
         order_id = self.env["sale.order"].create(
             {
                 "name": order_number,
@@ -187,12 +196,13 @@ class SaleOrder(models.Model):
                 ),
                 "stockpilot_id": order_id,
                 "stockpilot_configuration_id": stockpilot_configuration_id.id,
-                "warehouse_id": warehouse_id,
+                "warehouse_id": self._get_warehouse(
+                    stockpilot_configuration_id, order.get("shipment_country")
+                ).id,
+                "currency_id": self.env['res.currency'].search([("name", "=", order.get("currency_code"))], limit=1).id,
             }
         )
-        order_id = self.override_order(order_id, order)
-
-        order_id.pricelist_id = stockpilot_configuration_id.pricelist_id.id
+        order_id = self.override_order(order_id, order_info)
 
         missing_product = False
         for line in order.get("line_items"):
@@ -219,7 +229,7 @@ class SaleOrder(models.Model):
                     * 100,
                 }
             )
-        _logger.info(line.get("shipping_total"))
+        _logger.info(order.get("shipping_total"))
         if order.get("shipping_total"):
             self.env["sale.order.line"].create(
                 {
@@ -233,6 +243,9 @@ class SaleOrder(models.Model):
                 }
             )
         if order.get("discount"):
+            tax = self.env["account.tax"].search(
+                [("name", "=", order.get("vat_rate"))], limit=1
+            )
             self.env["sale.order.line"].create(
                 {
                     "order_id": order_id.id,
@@ -245,10 +258,10 @@ class SaleOrder(models.Model):
                     * 100,
                     "product_id": stockpilot_configuration_id.discount_product.id,
                     "product_uom_qty": 1,
+                    "tax_id": [(6, 0, tax.ids)] if tax else [(5, 0, 0)],
                 }
             )
-        _logger.info(warehouse_id)
-        order_id.warehouse_id = warehouse_id
+        order_id.message_post(body=_("Customer note: %s") % order.get("customer_note"))
         stockpilot_configuration_id._get_connection()
         if missing_product:
             order_id.message_post(
