@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <data>
+        <record id="view_stockpilot_configuration_form_inherit" model="ir.ui.view">
+            <field name="name">stockpilot.configuration.form.inherit</field>
+            <field name="model">stockpilot.configuration</field>
+            <field name="inherit_id" ref="ws_stockpilot_connector.view_stockpilot_configuration_form" />
+            <field name="arch" type="xml">
+                <xpath expr="//div[@name='button_box']" position="inside">
+                    <button 
+                        name="action_fetch_products" 
+                        string="Fetch Products" 
+                        type="object" 
+                        class="oe_stat_button btn-primary" 
+                        icon="fa-download" />
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>
