@@ -22,7 +22,7 @@ class ProductFetchWizard(models.TransientModel):
     
     page_size = fields.Integer(
         string="Page Size",
-        default=100,
+        default=50,
         help="Number of products to fetch per page",
     )
     
@@ -81,12 +81,12 @@ class ProductFetchWizard(models.TransientModel):
                     "page_size": self.page_size,
                 }
                 
-                _logger.info(f"Fetching products page {page} from Stockpilot API")
-                response = connection._execute_get_request("products", params)
+                _logger.info(f"Fetching inventory page {page} from Stockpilot API")
+                response = connection._execute_get_request("inventory", params)
                 
                 if response.status_code != 200:
                     raise UserError(
-                        _("Failed to fetch products from Stockpilot API. Status: %s")
+                        _("Failed to fetch inventory from Stockpilot API. Status: %s")
                         % response.status_code
                     )
                 
@@ -97,8 +97,8 @@ class ProductFetchWizard(models.TransientModel):
                 if not results:
                     break
                 
-                for product_data in results:
-                    self._process_product(product_data)
+                for inventory_data in results:
+                    self._process_inventory_item(inventory_data)
                     total_fetched += 1
                 
                 self.products_fetched = total_fetched
@@ -120,7 +120,7 @@ class ProductFetchWizard(models.TransientModel):
                 "tag": "display_notification",
                 "params": {
                     "title": _("Success"),
-                    "message": _("Fetched %s products from Stockpilot") % total_fetched,
+                    "message": _("Fetched %s inventory items from Stockpilot") % total_fetched,
                     "type": "success",
                     "sticky": False,
                 },
@@ -129,7 +129,7 @@ class ProductFetchWizard(models.TransientModel):
         except Exception as e:
             self.state = "error"
             self.error_message = str(e)
-            _logger.exception("Error fetching products from Stockpilot")
+            _logger.exception("Error fetching inventory from Stockpilot")
             
             return {
                 "type": "ir.actions.client",
@@ -142,34 +142,74 @@ class ProductFetchWizard(models.TransientModel):
                 },
             }
 
-    def _process_product(self, product_data):
-        """Process a single product from the API response"""
+    def _process_inventory_item(self, inventory_data):
+        """Process a single inventory item from the API response"""
         product_obj = self.env["product.product"]
+        stockpilot_product_obj = self.env["stockpilot.product.product"]
         
-        title = product_data.get("title", "")
-        description = product_data.get("description", "")
-        brand_id = product_data.get("brand")
-        category_id = product_data.get("category")
-        is_active = product_data.get("is_active", True)
-        image_url = product_data.get("image_url")
+        inventory_id = inventory_data.get("id")
+        item_name = inventory_data.get("item_name", "")
+        sku = inventory_data.get("sku", "")
+        barcode = inventory_data.get("barcode", "")
+        is_active = inventory_data.get("is_active", True)
+        
+        if not item_name:
+            _logger.warning(f"Skipping inventory item {inventory_id} - no item_name")
+            return
         
         vals = {
-            "name": title,
-            "description_sale": description,
+            "name": item_name,
+            "default_code": sku if sku else False,
+            "barcode": barcode if barcode else False,
             "active": is_active,
         }
         
-        existing_product = product_obj.search(
-            [("name", "=", title)],
-            limit=1,
-        )
+        existing_product = None
+        
+        if barcode:
+            existing_product = product_obj.search(
+                [("barcode", "=", barcode)],
+                limit=1,
+            )
+        
+        if not existing_product and sku:
+            existing_product = product_obj.search(
+                [("default_code", "=", sku)],
+                limit=1,
+            )
+        
+        if not existing_product:
+            existing_product = product_obj.search(
+                [("name", "=", item_name)],
+                limit=1,
+            )
         
         if existing_product:
             existing_product.write(vals)
-            _logger.info(f"Updated product: {title}")
+            _logger.info(f"Updated product: {item_name} (SKU: {sku})")
+            product = existing_product
         else:
-            product_obj.create(vals)
-            _logger.info(f"Created product: {title}")
+            product = product_obj.create(vals)
+            _logger.info(f"Created product: {item_name} (SKU: {sku})")
+        
+        existing_mapping = stockpilot_product_obj.search(
+            [
+                ("product_product_id", "=", product.id),
+                ("stockpilot_configuration_id", "=", self.configuration_id.id),
+            ],
+            limit=1,
+        )
+        
+        if existing_mapping:
+            existing_mapping.write({"stockpilot_id": str(inventory_id)})
+            _logger.info(f"Updated stockpilot mapping for product {product.name} with ID {inventory_id}")
+        else:
+            stockpilot_product_obj.create({
+                "product_product_id": product.id,
+                "stockpilot_configuration_id": self.configuration_id.id,
+                "stockpilot_id": str(inventory_id),
+            })
+            _logger.info(f"Created stockpilot mapping for product {product.name} with ID {inventory_id}")
 
     def action_close(self):
         """Close the wizard"""
