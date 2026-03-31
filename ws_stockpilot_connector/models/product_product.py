@@ -74,3 +74,18 @@ class ProductProduct(models.Model):
         elif stockpilot_configuration.stock_calculator == "outgoing_qty":
             return self.outgoing_qty
         return 0
+
+    def _stockpilot_get_bom_parent_products(self):
+        if "mrp.bom.line" not in self.env:
+            return self.env["product.product"]
+
+        bom_lines = self.env["mrp.bom.line"].search([("product_id", "in", self.ids)])
+        boms = bom_lines.mapped("bom_id")
+
+        parents = self.env["product.product"]
+        for bom in boms:
+            if bom.product_id:
+                parents |= bom.product_id
+            elif bom.product_tmpl_id:
+                parents |= bom.product_tmpl_id.product_variant_ids
+        return parents

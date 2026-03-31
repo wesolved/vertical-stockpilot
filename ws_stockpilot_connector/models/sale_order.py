@@ -67,9 +67,7 @@ class SaleOrder(models.Model):
                 "orders/fulfil",
                 {
                     "order_pk": self.stockpilot_id,
-                    "tracking_code": tracking if tracking else "",
-                    "carrier_name": self.stockpilot_configuration_id.carrier_method,
-                    "carrier_code": self.stockpilot_configuration_id.carrier_method
+                    "tracking_code": tracking if tracking else ""
                 },
             )
             _logger.info(
@@ -120,6 +118,7 @@ class SaleOrder(models.Model):
             # First check for parent
             partner = {
                 "name": _sp_val("shipment_company"),
+                "is_company": True,
                 "street": "%s %s %s"
                 % (
                     _sp_val("shipment_street"),
@@ -138,13 +137,14 @@ class SaleOrder(models.Model):
         partner = {
             "name": "%s %s"
             % (_sp_val("shipment_firstname"), _sp_val("shipment_lastname")),
+            "type": "delivery",
             "street": "%s %s %s"
             % (
                 _sp_val("shipment_street"),
                 _sp_val("shipment_housenumber"),
                 _sp_val("shipment_suffix"),
             ),
-            "street2": _sp_val("billing_address_2"),
+            "street2": _sp_val("shipment_address_2"),
             "zip": _sp_val("shipment_zipcode"),
             "city": _sp_val("shipment_city"),
             "country": _sp_val("shipment_country"),
@@ -158,6 +158,7 @@ class SaleOrder(models.Model):
         billing_partner = {
             "name": "%s %s"
             % (_sp_val("billing_firstname"), _sp_val("billing_lastname")),
+            "type": "invoice",
             "street": "%s %s %s"
             % (
                 _sp_val("billing_street"),
@@ -172,7 +173,12 @@ class SaleOrder(models.Model):
             "phone": _sp_val("customer_phone"),
         }
 
-        if partner != billing_partner:
+        partner_compare = dict(partner)
+        billing_partner_compare = dict(billing_partner)
+        partner_compare.pop("type", None)
+        billing_partner_compare.pop("type", None)
+
+        if partner_compare != billing_partner_compare:
             if company_id:
                 parent_id = company_id
             else:
@@ -229,7 +235,7 @@ class SaleOrder(models.Model):
                     * 100,
                 }
             )
-        _logger.info(order.get("shipping_total"))
+            
         if order.get("shipping_total"):
             self.env["sale.order.line"].create(
                 {
@@ -244,7 +250,7 @@ class SaleOrder(models.Model):
             )
         if order.get("discount"):
             tax = self.env["account.tax"].search(
-                [("name", "=", order.get("vat_rate"))], limit=1
+                [("amount", "=", float(order.get("vat_rate")))], limit=1
             )
             self.env["sale.order.line"].create(
                 {
