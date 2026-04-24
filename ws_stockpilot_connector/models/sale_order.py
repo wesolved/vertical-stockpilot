@@ -217,9 +217,12 @@ class SaleOrder(models.Model):
                     ),
                     "product_id": product.product_product_id[0].id,
                     "product_uom_qty": line.get("quantity"),
-                    "price_unit": float(line.get("retail_price"))
-                    / (100 + float(line.get("vat_rate")))
-                    * 100,
+                    "price_unit": round(
+                        float(line.get("retail_price"))
+                        / (100 + float(line.get("vat_rate")))
+                        * 100,
+                        2,
+                    ),
                 }
             )
         _logger.info(order.get("shipping_total"))
@@ -228,9 +231,12 @@ class SaleOrder(models.Model):
                 {
                     "order_id": order_id.id,
                     "name": "Shipping",
-                    "price_unit": float(order.get("shipping_total", 0))
-                    / (100 + float(order.get("vat_rate", 0)))
-                    * 100,
+                    "price_unit": round(
+                        float(order.get("shipping_total", 0))
+                        / (100 + float(order.get("vat_rate", 0)))
+                        * 100,
+                        2,
+                    ),
                     "product_id": stockpilot_configuration_id.shipping_product.id,
                     "product_uom_qty": 1,
                 }
@@ -243,12 +249,15 @@ class SaleOrder(models.Model):
                 {
                     "order_id": order_id.id,
                     "name": "Discount",
-                    "price_unit": (
-                        float(order.get("discount", 0))
-                        / (100 + float(order.get("vat_rate", 0)))
-                    )
-                    * -1
-                    * 100,
+                    "price_unit": round(
+                        (
+                            float(order.get("discount", 0))
+                            / (100 + float(order.get("vat_rate", 0)))
+                        )
+                        * -1
+                        * 100,
+                        2,
+                    ),
                     "product_id": stockpilot_configuration_id.discount_product.id,
                     "product_uom_qty": 1,
                     "tax_id": [(6, 0, tax.ids)] if tax else [(5, 0, 0)],
