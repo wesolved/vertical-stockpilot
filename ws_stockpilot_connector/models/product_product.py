@@ -82,16 +82,34 @@ class ProductProduct(models.Model):
         return 0
 
     def _stockpilot_get_bom_parent_products(self):
+        """
+        Return all finished/kit products that use any product in ``self`` as a
+        BOM component, walking the BOM graph recursively so multi-level BOMs
+        (a component inside a sub-assembly inside a kit) are all included.
+
+        The moved products themselves are excluded from the result.
+        """
         if "mrp.bom.line" not in self.env:
             return self.env["product.product"]
 
-        bom_lines = self.env["mrp.bom.line"].search([("product_id", "in", self.ids)])
-        boms = bom_lines.mapped("bom_id")
-
         parents = self.env["product.product"]
-        for bom in boms:
-            if bom.product_id:
-                parents |= bom.product_id
-            elif bom.product_tmpl_id:
-                parents |= bom.product_tmpl_id.product_variant_ids
-        return parents
+        frontier = self
+        seen = self.env["product.product"]
+
+        # Breadth-first walk up the BOM graph, guarding against cycles.
+        while frontier:
+            seen |= frontier
+            bom_lines = self.env["mrp.bom.line"].search(
+                [("product_id", "in", frontier.ids)]
+            )
+            level_parents = self.env["product.product"]
+            for bom in bom_lines.mapped("bom_id"):
+                if bom.product_id:
+                    level_parents |= bom.product_id
+                elif bom.product_tmpl_id:
+                    level_parents |= bom.product_tmpl_id.product_variant_ids
+
+            parents |= level_parents
+            frontier = level_parents - seen
+
+        return parents - self

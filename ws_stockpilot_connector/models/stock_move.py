@@ -15,9 +15,47 @@ class StockMove(models.Model):
             recordset: Result of the parent _action_done call.
         """
         res = super()._action_done(*args, **kwargs)
-        for record in self:
-            if record.state == "done":
-                products_to_sync = record.product_id
-                products_to_sync |= record.product_id._stockpilot_get_bom_parent_products()
-                products_to_sync.with_delay()._update_stockpilot_stock()
+        done_moves = self.filtered(lambda m: m.state == "done")
+        if not done_moves:
+            return res
+
+        moved_products = done_moves.product_id
+        # A product whose stock changed may itself be a component in one or
+        # more BOMs (kit/phantom or manufacturing). The finished/kit product's
+        # available quantity is derived from its components, so it must be
+        # resynced whenever a component moves. Walk parents recursively so
+        # multi-level BOMs are covered as well.
+        products_to_sync = moved_products | done_moves._stockpilot_bom_related_products()
+
+        # Enqueue one job per product so a single failing/unmapped product
+        # cannot swallow the updates for the others in the batch.
+        for product in products_to_sync:
+            product.with_delay()._update_stockpilot_stock()
         return res
+
+    def _stockpilot_bom_related_products(self):
+        """
+        Collect the finished/kit products that need a stock resync because one
+        of the moves in ``self`` touched a component.
+
+        Uses each move's own ``bom_line_id`` when available (the exact BOM the
+        move originated from, e.g. an exploded phantom kit) and additionally
+        walks the BOM graph upward so that products which merely *contain* a
+        moved product as a component are resynced too.
+
+        Returns:
+            recordset: product.product records to (re)sync, excluding the
+            moved products themselves.
+        """
+        products = self.env["product.product"]
+
+        # Direct BOM link recorded on the exploded/consumed moves.
+        for move in self:
+            bom = move.bom_line_id.bom_id
+            if bom:
+                products |= bom.product_id or bom.product_tmpl_id.product_variant_ids
+
+        # Walk upward through every BOM that uses the moved products.
+        products |= self.product_id._stockpilot_get_bom_parent_products()
+
+        return products
