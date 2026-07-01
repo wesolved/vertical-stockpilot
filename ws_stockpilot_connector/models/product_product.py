@@ -11,6 +11,35 @@ class ProductProduct(models.Model):
         "stockpilot.product.product", "product_product_id", copy=False
     )
 
+    def _stockpilot_get_bom_parent_products(self):
+        """
+        Return the manufactured/kit product variants whose bill of materials
+        contain one of these products as a component. Their available quantity
+        depends on the component stock, so they must be re-synced to Stockpilot
+        whenever the component stock changes.
+
+        Safe to call when the ``mrp`` module is not installed: the ``mrp.bom``
+        model is simply absent and an empty recordset is returned.
+
+        Returns:
+            recordset: product.product records that should also be synced.
+        """
+        parent_products = self.env["product.product"]
+        bom_model = self.env.get("mrp.bom")
+        if bom_model is None or not self:
+            return parent_products
+
+        boms = bom_model.search(
+            [("bom_line_ids.product_id", "in", self.ids)]
+        )
+        for bom in boms:
+            if bom.product_id:
+                parent_products |= bom.product_id
+            else:
+                # BOM defined on the template: include all its variants.
+                parent_products |= bom.product_tmpl_id.product_variant_ids
+        return parent_products
+
     def _push_stockpilot_product(self, configuration_id=False):
         """
         Push the product to Stockpilot and create a stockpilot.product.product record.

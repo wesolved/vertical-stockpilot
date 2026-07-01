@@ -1,0 +1,5 @@
+<odoo>
+    <record id="stockpilot_pricelist" model="product.pricelist">
+        <field name="name">Stockpilot pricelist</field>
+    </record>
+</odoo>

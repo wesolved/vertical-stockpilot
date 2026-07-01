@@ -35,6 +35,14 @@ class StockpilotConfiguration(models.Model):
     )
     crm_team_id = fields.Many2one("crm.team")
     auto_confirm_orders = fields.Boolean()
+    pricelist_id = fields.Many2one(
+        "product.pricelist",
+        string="Pricelist",
+        default=lambda self: self.env.ref(
+            "ws_stockpilot_connector.stockpilot_pricelist", raise_if_not_found=False
+        ),
+        help="Pricelist applied to sale orders imported from Stockpilot.",
+    )
     carrier_method = fields.Char()
     create_missing_taxes = fields.Boolean(
         string="Create Missing Taxes",

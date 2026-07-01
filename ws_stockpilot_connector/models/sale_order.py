@@ -169,24 +169,27 @@ class SaleOrder(models.Model):
         else:
             billing_partner = partner_id
 
-        order_id = self.env["sale.order"].create(
-            {
-                "name": order_number,
-                "partner_id": partner_id.id,
-                "partner_shipping_id": partner_id.id,
-                "partner_invoice_id": billing_partner.id,
-                "client_order_ref": order_number,
-                "team_id": stockpilot_configuration_id.crm_team_id.id,
-                "date_order": datetime.datetime.fromisoformat(order_date).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-                "stockpilot_id": order_id,
-                "stockpilot_configuration_id": stockpilot_configuration_id.id,
-                "warehouse_id": self._get_warehouse(
-                    stockpilot_configuration_id, order.get("shipment_country")
-                ).id,
-            }
-        )
+        order_vals = {
+            "name": order_number,
+            "partner_id": partner_id.id,
+            "partner_shipping_id": partner_id.id,
+            "partner_invoice_id": billing_partner.id,
+            "client_order_ref": order_number,
+            "team_id": stockpilot_configuration_id.crm_team_id.id,
+            "date_order": datetime.datetime.fromisoformat(order_date).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            "stockpilot_id": order_id,
+            "stockpilot_configuration_id": stockpilot_configuration_id.id,
+            "warehouse_id": self._get_warehouse(
+                stockpilot_configuration_id, order.get("shipment_country")
+            ).id,
+        }
+        # Only override the pricelist when the configuration defines one,
+        # otherwise let Odoo derive it from the customer.
+        if stockpilot_configuration_id.pricelist_id:
+            order_vals["pricelist_id"] = stockpilot_configuration_id.pricelist_id.id
+        order_id = self.env["sale.order"].create(order_vals)
         order_id = self.override_order(order_id, order)
 
         missing_product = False
