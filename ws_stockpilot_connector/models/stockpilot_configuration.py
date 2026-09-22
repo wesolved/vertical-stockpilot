@@ -43,6 +43,12 @@ class StockpilotConfiguration(models.Model):
         help="Automatically create tax records when they don't exist",
     )
     default_warehouse_id = fields.Many2one("stock.warehouse")
+    external_warehouse_id = fields.Many2one(
+        "stock.warehouse",
+        string="External Order Warehouse",
+        help="Warehouse used for Stockpilot orders flagged as external. "
+        "When left empty, external orders are skipped during import.",
+    )
 
     default_tax_id = fields.Many2one(
         "account.tax",
