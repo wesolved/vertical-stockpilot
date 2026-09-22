@@ -4,11 +4,21 @@ from odoo import models
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
-    def get_warehouse(self, stockpilot_configuration_id, country_code):
+    def _get_warehouse(
+        self, stockpilot_configuration_id, country_code, is_external=False
+    ):
         """
         Get the warehouse based on the country code using the CountryWarehouse mapping.
         If no specific mapping exists, return the default warehouse from the configuration.
+
+        External orders bypass the country mapping entirely: they are always
+        routed to the configuration's external warehouse.
         """
+        if is_external:
+            return super()._get_warehouse(
+                stockpilot_configuration_id, country_code, is_external=is_external
+            )
+
         warehouse_id = (
             self.env["country.warehouse"]
             .search(

@@ -38,8 +38,44 @@ class SaleOrder(models.Model):
             )
             _logger.info(res)
 
-    def _get_warehouse(self, stockpilot_configuration_id, country_code):
+    def _get_warehouse(
+        self, stockpilot_configuration_id, country_code, is_external=False
+    ):
+        """
+        Resolve the warehouse an imported Stockpilot order should be booked on.
+
+        External orders are routed to the dedicated external warehouse, which
+        takes precedence over any other mapping. Other modules may extend this
+        method for their own (e.g. country based) routing.
+
+        Args:
+            stockpilot_configuration_id (recordset): The configuration used for the import.
+            country_code (str): Shipping country code of the order.
+            is_external (bool): Whether the order is flagged as external in Stockpilot.
+
+        Returns:
+            recordset: The stock.warehouse to use.
+        """
+        if is_external:
+            return stockpilot_configuration_id.external_warehouse_id
         return stockpilot_configuration_id.default_warehouse_id
+
+    def _is_external_stockpilot_order(self, order):
+        """
+        Tell whether a Stockpilot order payload is flagged as external.
+
+        Args:
+            order (dict): Stockpilot order data, either the full payload or its
+                "order_details" section.
+
+        Returns:
+            bool: True when the order is marked external in Stockpilot.
+        """
+        if not order:
+            return False
+        if order.get("is_external"):
+            return True
+        return bool((order.get("order_details") or {}).get("is_external"))
 
     def _stockpilot_fulfill(self, t_and_t):
         """
@@ -101,6 +137,14 @@ class SaleOrder(models.Model):
         order_date = order.get("created_at")
         if self.search([("stockpilot_id", "=", order_id)]):
             _logger.debug(f"Stockpilot order {order_id} already exists")
+            return
+
+        is_external = self._is_external_stockpilot_order(order)
+        if is_external and not stockpilot_configuration_id.external_warehouse_id:
+            _logger.info(
+                f"Skipping external Stockpilot order {order_id}: no external warehouse "
+                f"configured on {stockpilot_configuration_id.name}"
+            )
             return
 
         order = order.get("order_details")
@@ -182,7 +226,9 @@ class SaleOrder(models.Model):
             "stockpilot_id": order_id,
             "stockpilot_configuration_id": stockpilot_configuration_id.id,
             "warehouse_id": self._get_warehouse(
-                stockpilot_configuration_id, order.get("shipment_country")
+                stockpilot_configuration_id,
+                order.get("shipment_country"),
+                is_external=is_external,
             ).id,
         }
         # Only override the pricelist when the configuration defines one,
